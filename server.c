@@ -11,61 +11,84 @@
 #include <sys/types.h>
 #define BUFSIZE ((size_t)10)
 #define MAXPENDING 10
-int get_server_sock(char* service){
-	struct addrinfo addr_config;
-	memset(&addr_config, 0, sizeof(addr_config));
-	addr_config.ai_family = AF_INET6;
-	addr_config.ai_flags = AI_PASSIVE;
-	addr_config.ai_socktype = SOCK_STREAM;
-	addr_config.ai_protocol = IPPROTO_TCP;
-	struct addrinfo* addr_list;
-	int rtn_value = getaddrinfo(NULL, service, &addr_config, &addr_list);
-	if(rtn_value!=0){
-		return -1;
-	}
-	int fd = -1;
-	for(struct addrinfo* l_item=addr_list;l_item!=NULL;l_item=l_item->ai_next){
-		fd = socket(l_item->ai_family,l_item->ai_socktype,l_item->ai_protocol);
-		if(fd<0){
-			continue;
-		}
-		int bind_result = bind(fd, l_item->ai_addr, l_item->ai_addrlen);
-		int listen_result = listen(fd, MAXPENDING);
-		if((bind_result == 0) && (listen_result == 0)){
-				int val = 1;
-				setsockopt(fd,
-						   SOL_SOCKET,
-						   SO_REUSEADDR,
-						   &val, // Enable the option
-						   sizeof(val));
-				break;
-		}
-	}
-	return fd;
+
+typedef struct{
+    void* content;
+    unsigned char type;
+    struct ArrElem* next;
+} ArrElem;
+typedef enum{
+    SIMPLE_STR = 0,
+    INT        = 1,
+    BULK_STR   = 2,
+    ARRAY      = 3
+} RedisDtype;
+int 
+get_server_sock(char* service) {
+    struct addrinfo addr_config;
+    memset(&addr_config, 0, sizeof(addr_config));
+    addr_config.ai_family   = AF_INET6;
+    addr_config.ai_flags    = AI_PASSIVE;
+    addr_config.ai_socktype = SOCK_STREAM;
+    addr_config.ai_protocol = IPPROTO_TCP;
+
+    struct addrinfo* addr_list;
+    int rtn_value = getaddrinfo(NULL, service, &addr_config, &addr_list);
+    if (rtn_value != 0) {
+        return -1;
+    }
+
+    int fd = -1;
+    for (struct addrinfo* l_item = addr_list; l_item != NULL; l_item = l_item->ai_next) {
+        fd = socket(l_item->ai_family, l_item->ai_socktype, l_item->ai_protocol);
+        if (fd < 0) {
+            continue;
+        }
+
+        int bind_result = bind(fd, l_item->ai_addr, l_item->ai_addrlen);
+        int listen_result = listen(fd, MAXPENDING);
+        if ((bind_result == 0) && (listen_result == 0)) {
+            int val = 1;
+            setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &val, sizeof(val)); // Enable the option
+            break;
+        }
+    }
+
+    return fd;
 }
+int
+accept_client(int server_fd){
+    struct sockaddr_in client_addr;
+    size_t client_addr_len;
+    client_addr_len = sizeof(client_addr);
+    return accept(server_fd, (struct sockaddr*)&client_addr, &client_addr_len);
+}
+//TODO: Implement the ECHO command
 
 
-int main() {
+int
+main() {
 	setbuf(stdout, NULL);
 	setbuf(stderr, NULL);
-	int server_fd, client_addr_len;
+	int server_fd, client_fd;
 	struct sockaddr_in client_addr;
 	server_fd = get_server_sock("6379");
 	if (server_fd == -1) {
 		printf("Socket creation failed: %s...\n", strerror(errno));
-		return 1;
+		return -1;
 	}
 	printf("Waiting for a client to connect...\n");
-	client_addr_len = sizeof(client_addr);
-	int client_fd = accept(server_fd, (struct sockaddr *) &client_addr, &client_addr_len);
+    client_fd = accept_client(server_fd);
 	char* msg = "+PONG\r\n";
 	printf("Client connected\n");
 	char* buff = calloc(BUFSIZE,sizeof(char));
 	while(recv(client_fd,buff,(size_t)BUFSIZE-1,0)!=EOF){
 		send(client_fd,msg,strlen(msg),0);
+
 	}
 	close(server_fd);
 	close(client_fd);
+    //verificar se esse é o jeito correto de se desalocar um vetor de char
 	free(buff);
 
 	return 0;
