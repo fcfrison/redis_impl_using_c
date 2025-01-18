@@ -1,24 +1,29 @@
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <sys/socket.h>
 #define MAX_ARRAY_SIZE (size_t)512
-typedef struct{
-    void* content;
-    unsigned char type;
-    struct ArrElem* next;
-    struct ArrElem* prev;
-} ArrElem;
+typedef struct ArrElem ArrElem;
 typedef enum{
-    SIMPLE_STR = 0,
-    INT        = 1,
-    BULK_STR   = 2,
-    ARRAY      = 3
+    UNDEF_DTYPE = -1,
+    SIMPLE_STR  =  0,
+    INT         =  1,
+    BULK_STR    =  2,
+    ARRAY       =  3
 } RedisDtype;
+struct ArrElem{
+    void*      content;
+    RedisDtype type;
+    ArrElem*   next;
+    ArrElem*   prev;
+} ;
 
 ArrElem* parse_array(int fd);
 ArrElem* parse_bulk_str(void);
 int      get_arr_size(int fd);
 char     get_next_char(int fd);
 void     delete_array(ArrElem* el);
+unsigned int string_to_uint(char* string);
 
 ArrElem*
 parse_array(int fd){
@@ -34,7 +39,7 @@ parse_array(int fd){
     while(inserted_el<arr_size){
         ArrElem* next = (ArrElem*)calloc(1,sizeof(ArrElem));
         next->content = NULL;
-        next->type    = NULL;
+        next->type    = UNDEF_DTYPE;
         next->next    = NULL;
         next->prev    = previous;
         next_char     = get_next_char(fd);
@@ -66,19 +71,48 @@ int
 get_arr_size(int fd){
     ssize_t ret_val;
     char* buf = (char*) calloc(MAX_ARRAY_SIZE, sizeof(char));
-    int n_bytes = 0;
+    unsigned int  arr_size, n_bytes = 0;
+    unsigned char is_digit, state   = 0;
     while(1){
-        ret_val = recv(fd, buf, 1, 0);
-        if(ret_val==-1 || buf[n_bytes]<48 || buf[n_bytes]>57){
-            //provavelmente eu tenha que iterar sobre o vetor
+        ret_val = recv(fd, &buf[n_bytes], 1, 0);
+        if(ret_val==-1){
             free(buf);
             return -1;
         }
-        buf++;
+        if(state==0){
+            is_digit = (buf[n_bytes]>47 && buf[n_bytes]<58);
+            if(is_digit){
+                n_bytes++;
+                continue;
+            }
+            if(buf[n_bytes]=='\r'){
+                state = 1;
+                continue;
+            }
+            free(buf);
+            return -1;
+        }
+        if(buf[n_bytes]!='\n'){
+            free(buf);
+            return -1;
+        }
+        buf[n_bytes] = '\0';
+        break;
     }
+    arr_size = string_to_uint(buf);
     free(buf);
-    //converter de char para integer
-    return fd;
+    return arr_size;
     };
 char     get_next_char(int fd){return '$';};
-void     delete_array(ArrElem* el){return NULL;};
+void     delete_array(ArrElem* el){};
+
+unsigned int
+string_to_uint(char* string){
+    ssize_t size = strlen(string);
+    unsigned int num = 0;
+    for(unsigned int i=0;i<size;i++){
+        num = num * 10;
+        num+=string[i]-48;
+    }
+    return num;
+}
