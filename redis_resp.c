@@ -11,7 +11,8 @@ typedef enum{
     SIMPLE_STR  =  0,
     INT         =  1,
     BULK_STR    =  2,
-    ARRAY       =  3
+    ARRAY       =  3,
+    NILL        =  4
 } RedisDtype;
 typedef enum ArraySizeStates{
     START_STATE        = 0,
@@ -37,21 +38,28 @@ unsigned int string_to_uint(char* string);
 
 ArrElem*
 parse_array(int fd){
-    // parsing assuming perfectly crafted strings
+    // this parse assumes perfectly crafted strings
     int arr_size = get_arr_size(fd);
     char next_char;
-    if(arr_size==1){
+    if(arr_size==-2){
         return NULL;
+    }
+    if(arr_size==-1){
+        return new_arr_el(NULL,NILL,NULL,NULL);
+    }
+    if(!arr_size){
+        //empty array    
+        return new_arr_el("\0",BULK_STR,NULL,NULL);
     }
     unsigned int inserted_el = 0;
     ArrElem* previous = NULL;
     ArrElem* first    = NULL;
     while(inserted_el<arr_size){
-        ArrElem* next = (ArrElem*)calloc(1,sizeof(ArrElem));
-        next->content = NULL;
-        next->type    = UNDEF_DTYPE;
-        next->next    = NULL;
-        next->prev    = previous;
+        ArrElem* next = new_arr_el(NULL,UNDEF_DTYPE,NULL,previous);
+        if(!next){
+            delete(previous);
+            return NULL;
+        }
         next_char     = get_next_char(fd);
         switch (next_char){
             case '$':
@@ -73,7 +81,26 @@ parse_array(int fd){
     }
     return first;
 };
+ArrElem* new_arr_el(void* content,
+                    RedisDtype type,
+                    ArrElem* next,
+                    ArrElem* prev){
+    ArrElem* arr_el = (ArrElem*)calloc(1,sizeof(ArrElem));
+    if(arr_el==NULL){
+        return NULL;
+    }
+    arr_el->content = content;
+    arr_el->type    = type;
+    arr_el->next    = next;
+    arr_el->prev    = prev;
+    return arr_el;
+}
+    
+//TODO: implement the function is_empty_arr
+int is_empty_arr(int fd){
+    char next_char;
 
+}
 
 ArrElem* parse_bulk_str(void){};
 
@@ -153,65 +180,6 @@ get_arr_size(int fd){
             should_continue = 0;
             break;
         }
-        /*
-        if(state==START_STATE){
-            is_digit = (buf[0]>47 && buf[0]<58);
-            if(is_digit){
-                n_bytes++;
-                state=DIGIT_STATE;
-                continue;
-            }
-            if(buf[0]='-'){
-                state=NEG_DIGIT_STATE_I;
-                is_negative = 1;
-                continue;
-            }
-            free(buf);
-            return ERR_INV_CHAR;
-        }
-        // DIGIT_STATE: the first char was a valid digit (0,1,2,...). The next char could be a digit or '\r'
-        if(state==DIGIT_STATE){
-            is_digit = (buf[n_bytes]>47 && buf[n_bytes]<58);
-            if(is_digit){
-                n_bytes++;
-                continue;
-            }
-            if(buf[n_bytes]=='\r'){
-                state=END_STATE;
-                continue;
-            }
-            free(buf);
-            return ERR_INV_CHAR;
-        }
-        // NEG_DIGIT_STATE_I: the first char was '-'. The next digit must the digit '1'
-        if(state==NEG_DIGIT_STATE_I){
-            if(buf[n_bytes]!='1'){
-                free(buf);
-                return ERR_INV_CHAR;
-            }
-            n_bytes++;
-            state=NEG_DIGIT_STATE_II;
-            continue;
-        }
-        
-        if(state==NEG_DIGIT_STATE_II){
-            if(buf[n_bytes]!='\r'){
-                free(buf);
-                return ERR_INV_CHAR;
-            }
-            state=END_STATE;
-            continue;
-        }
-        // NEG_DIGIT_STATE_II: the first char was '-'. The second was 1. The next digit must the digit '\r'
-        // state END_STATE: the previous char was '\r' and the next must be '\n'
-        if(state==END_STATE){
-            if(buf[n_bytes]!='\n'){
-                free(buf);
-                return ERR_INV_CHAR;
-            }
-            break;
-        }
-        */
     }
     arr_size = string_to_uint(buf);
     free(buf);
