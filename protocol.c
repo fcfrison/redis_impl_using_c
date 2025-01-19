@@ -2,45 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
-#define MAX_ARRAY_SIZE (size_t)8192
-#define ERR_INV_CHAR           -2
-#define ERR_ARRAY_OVERFLOW     -2
-#define DOLLAR_BYTE            '$'
-#define ASTERISK_BYTE          '*'
-#define PLUS_BYTE              '+'
-#define MINUS_BYTE             '-'
-#define COLON_BYTE             ':'
-typedef struct ArrElem ArrElem;
-typedef enum{
-    UNDEF_DTYPE = -1,
-    SIMPLE_STR  =  0,
-    INT         =  1,
-    BULK_STR    =  2,
-    ARRAY       =  3,
-    NILL        =  4
-} RedisDtype;
-typedef enum ArraySizeStates{
-    START_STATE        = 0,
-    DIGIT_STATE        = 1,
-    NEG_DIGIT_STATE_I  = 2,
-    NEG_DIGIT_STATE_II = 3,
-    END_STATE          = 4
-
-};
-struct ArrElem{
-    void*      content;
-    RedisDtype type;
-    ArrElem*   next;
-    ArrElem*   prev;
-} ;
-
-ArrElem* parse_array(int fd);
-ArrElem* parse_bulk_str(void);
-int      get_arr_size(int fd);
-char     get_next_char(int fd);
-void     delete_array(ArrElem* el);
-unsigned int string_to_uint(char* string);
-
+#include <protocol.h>
+#include <util.c>
 ArrElem*
 parse_array(int fd){
     // this parse assumes perfectly crafted strings
@@ -54,7 +17,10 @@ parse_array(int fd){
         return new_arr_el(NULL,NILL,NULL,NULL);
     }
     if(!arr_size){
-        //empty array    
+        //empty array
+        if(!is_valid_terminator(fd)){
+            return NULL;
+        }  
         return new_arr_el("\0",BULK_STR,NULL,NULL);
     }
     unsigned int inserted_el = 0;
@@ -105,7 +71,17 @@ ArrElem* new_arr_el(void* content,
     arr_el->prev    = prev;
     return arr_el;
 }
-    
+
+/**
+* Checks if the next characters in a file descriptor's receive buffer form a valid CRLF terminator.
+*
+* Reads characters one at a time from the file descriptor and verifies they match the
+* expected CRLF ('\r\n') sequence. Returns immediately if an invalid character is encountered
+* or if there is an error reading from the file descriptor.
+*
+* @param fd File descriptor to read from
+* @return 1 if a valid CRLF terminator was found, 0 if invalid sequence or error
+*/
 int is_valid_terminator(int fd){
     unsigned char next_char;
     unsigned char state = 0;
@@ -128,9 +104,7 @@ int is_valid_terminator(int fd){
                 }
                 return 1;
         }
-
     }
-
 }
 
 ArrElem* parse_bulk_str(void){};
@@ -219,13 +193,3 @@ get_arr_size(int fd){
 char     get_next_char(int fd){return '$';};
 void     delete_array(ArrElem* el){};
 
-unsigned int
-string_to_uint(char* string){
-    ssize_t size = strlen(string);
-    unsigned int num = 0;
-    for(unsigned int i=0;i<size;i++){
-        num = num * 10;
-        num+=string[i]-48;
-    }
-    return num;
-}
