@@ -9,20 +9,10 @@
 #include <unistd.h>
 #include <netdb.h>
 #include <sys/types.h>
+#include "../include/protocol.h"
+#include "../include/util.h"
 #define BUFSIZE ((size_t)10)
 #define MAXPENDING 10
-
-typedef struct{
-    void* content;
-    unsigned char type;
-    struct ArrElem* next;
-} ArrElem;
-typedef enum{
-    SIMPLE_STR = 0,
-    INT        = 1,
-    BULK_STR   = 2,
-    ARRAY      = 3
-} RedisDtype;
 int 
 get_server_sock(char* service) {
     struct addrinfo addr_config;
@@ -71,6 +61,8 @@ main() {
 	setbuf(stdout, NULL);
 	setbuf(stderr, NULL);
 	int server_fd, client_fd;
+	char buff;
+    ssize_t rtn;
 	struct sockaddr_in client_addr;
 	server_fd = get_server_sock("6379");
 	if (server_fd == -1) {
@@ -79,17 +71,28 @@ main() {
 	}
 	printf("Waiting for a client to connect...\n");
     client_fd = accept_client(server_fd);
-	char* msg = "+PONG\r\n";
 	printf("Client connected\n");
-	char* buff = calloc(BUFSIZE,sizeof(char));
-	while(recv(client_fd,buff,(size_t)BUFSIZE-1,0)!=EOF){
-		send(client_fd,msg,strlen(msg),0);
+	while(1){
+        rtn = recv(client_fd,&buff,(size_t)BUFSIZE-1,0);
+        if(rtn==-1){
+            printf("Invalid data received: %s...\n", strerror(errno));
+		    return -1;
+        }
+		//send(client_fd,msg,strlen(msg),0);
+        switch (buff)
+        {
+        case '*':
+            //parse_array(client_fd);
+            printf("value: %d", string_to_uint("6379"));
+
+            break;
+        
+        default:
+            break;
+        }
 
 	}
 	close(server_fd);
 	close(client_fd);
-    //verificar se esse é o jeito correto de se desalocar um vetor de char
-	free(buff);
-
 	return 0;
 }

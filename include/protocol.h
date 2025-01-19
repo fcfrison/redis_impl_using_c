@@ -32,7 +32,4 @@ struct ArrElem{
 
 ArrElem* parse_array(int fd);
 ArrElem* parse_bulk_str(void);
-int      get_arr_size(int fd);
-char     get_next_char(int fd);
 void     delete_array(ArrElem* el);
-unsigned int string_to_uint(char* string);

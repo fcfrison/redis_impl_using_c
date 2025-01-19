@@ -1,0 +1,1 @@
+unsigned int string_to_uint(char* string);

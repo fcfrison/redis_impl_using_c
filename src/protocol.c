@@ -2,8 +2,16 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
-#include <protocol.h>
-#include <util.c>
+#include "../include/protocol.h"
+#include "../include/util.h"
+ArrElem* new_arr_el(void* content,
+                    RedisDtype type,
+                    ArrElem* next,
+                    ArrElem* prev);
+int  is_valid_terminator(int fd);
+int  get_arr_size(int fd);
+char get_next_char(int fd);
+void delete_array(ArrElem* el);
 ArrElem*
 parse_array(int fd){
     // this parse assumes perfectly crafted strings
@@ -29,7 +37,7 @@ parse_array(int fd){
     while(inserted_el<arr_size){
         ArrElem* next = new_arr_el(NULL,UNDEF_DTYPE,NULL,previous);
         if(!next){
-            delete(previous);
+            delete_array(previous);
             return NULL;
         }
         next_char = get_next_char(fd);
