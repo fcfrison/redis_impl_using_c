@@ -9,41 +9,38 @@ ArrElem* new_arr_el(void* content,
                     ArrElem* next,
                     ArrElem* prev);
 int  is_valid_terminator(int fd);
-int  get_arr_size(int fd);
-char get_next_char(int fd);
+int  get_el_size(int fd);
 void delete_array(ArrElem* el);
+int read_exact_bytes(int fd, char* buf, size_t len);
+ArrElem* parse_bulk_str(int fd);
+void log_error(const char *message);
+
 ArrElem*
 parse_array(int fd){
     // this parse assumes perfectly crafted strings
-    int arr_size = get_arr_size(fd);
+    int arr_size = get_el_size(fd);
     char next_char;
     if(arr_size==-2){
         return NULL;
     }
     if(arr_size==-1){
-        //nill array
-        return new_arr_el(NULL,NILL,NULL,NULL);
+        return new_arr_el(NULL,NILL_ARRAY,NULL,NULL);
     }
     if(!arr_size){
-        //empty array
-        if(!is_valid_terminator(fd)){
-            return NULL;
-        }  
-        return new_arr_el("\0",BULK_STR,NULL,NULL);
+        return new_arr_el(NULL,EMPTY_ARRAY,NULL,NULL);
     }
     unsigned int inserted_el = 0;
     ArrElem* previous = NULL;
     ArrElem* first    = NULL;
-    while(inserted_el<arr_size){
-        ArrElem* next = new_arr_el(NULL,UNDEF_DTYPE,NULL,previous);
-        if(!next){
+    while(inserted_el<(unsigned int)arr_size){
+        ArrElem* next;
+        if(!read_exact_bytes(fd, &next_char,1)){
             delete_array(previous);
             return NULL;
-        }
-        next_char = get_next_char(fd);
+        };
         switch (next_char){
             case DOLLAR_BYTE:
-                /* code */
+                next = parse_bulk_str(fd);
                 break;
             case ASTERISK_BYTE:
                 /* code */
@@ -54,17 +51,49 @@ parse_array(int fd){
             default:
                 break;
         }
-        if(!next->content){
-            delete_array(next);
+        if(!next){
+            delete_array(previous);
             return NULL;
         }
+        if(previous){
+            previous->next = next;
+        }
+        next->prev = previous;
         if(!next->prev){
             first = next;
         }
         previous = next;
+        inserted_el++;
     }
     return first;
 };
+
+ArrElem* 
+parse_bulk_str(int fd){
+    int  str_size = get_el_size(fd);
+    if(!str_size){
+        //empty string
+        if(!is_valid_terminator(fd)){
+            return NULL;
+        }
+        return new_arr_el("",BULK_STR, NULL, NULL);
+    }
+    if(str_size==-1){
+        return new_arr_el(NULL, BULK_STR, NULL, NULL);
+    }
+    if(str_size>PROTO_MAX_BULK_SIZE){
+        log_error("The string size is greater than the max bulk size");
+        return NULL;
+    }
+    char* buf = calloc(str_size,sizeof(char)+1);
+    if(!read_exact_bytes(fd,buf,str_size)){
+        return NULL;
+    }
+    if(!is_valid_terminator(fd)){
+        return NULL;
+    }
+    return new_arr_el(buf,BULK_STR,NULL,NULL);
+}
 ArrElem* new_arr_el(void* content,
                     RedisDtype type,
                     ArrElem* next,
@@ -90,7 +119,8 @@ ArrElem* new_arr_el(void* content,
 * @param fd File descriptor to read from
 * @return 1 if a valid CRLF terminator was found, 0 if invalid sequence or error
 */
-int is_valid_terminator(int fd){
+int 
+is_valid_terminator(int fd){
     unsigned char next_char;
     unsigned char state = 0;
     ssize_t ret_val;
@@ -115,10 +145,8 @@ int is_valid_terminator(int fd){
     }
 }
 
-ArrElem* parse_bulk_str(void){};
-
 int
-get_arr_size(int fd){
+get_el_size(int fd){
     // It's possible *0\r\n  --> empty arrays
     // It's possible *-1\r\n --> nil arrays
     // It's not possible *\r\n   
@@ -147,7 +175,7 @@ get_arr_size(int fd){
                 state=DIGIT_STATE;
                 break;
             }
-            if(buf[0]='-'){
+            if(buf[0]==MINUS_BYTE){
                 state=NEG_DIGIT_STATE_I;
                 is_negative = 1;
                 break;
@@ -187,10 +215,11 @@ get_arr_size(int fd){
         // END_STATE: the previous char was '\r' and the next must be '\n'
         case END_STATE:
             if(buf[n_bytes]!='\n'){
-                    free(buf);
-                    return ERR_INV_CHAR;
+                free(buf);
+                return ERR_INV_CHAR;
                 }
             should_continue = 0;
+            buf[n_bytes]='\0';
             break;
         }
     }
@@ -198,6 +227,24 @@ get_arr_size(int fd){
     free(buf);
     return is_negative?(-1)*arr_size:arr_size;
     };
-char     get_next_char(int fd){return '$';};
-void     delete_array(ArrElem* el){};
+int 
+read_exact_bytes(int fd, char* buf, size_t len){
+    ssize_t rtn = recv(fd,buf,len,MSG_WAITALL);
+    if(!rtn){
+        log_error("connection closed by the client");
+        return 0;
+    }
+    if((size_t)rtn < len){
+        log_error("less bytes than the expected were received");
+        return 0;
+    }
+    return 1;
+    };
+void 
+log_error(const char *message) {
+    fprintf(stderr, "Error: %s\n", message);
+}
+void
+delete_array(ArrElem* el){
 
+};

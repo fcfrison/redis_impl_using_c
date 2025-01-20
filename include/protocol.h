@@ -1,4 +1,5 @@
 #define MAX_ARRAY_SIZE (size_t)8192
+#define PROTO_MAX_BULK_SIZE    512000000
 #define ERR_INV_CHAR           -2
 #define ERR_ARRAY_OVERFLOW     -2
 #define DOLLAR_BYTE            '$'
@@ -13,7 +14,8 @@ typedef enum{
     INT         =  1,
     BULK_STR    =  2,
     ARRAY       =  3,
-    NILL        =  4
+    NILL_ARRAY  =  4,
+    EMPTY_ARRAY =  5
 } RedisDtype;
 typedef enum ArraySizeStates{
     START_STATE        = 0,
@@ -31,5 +33,5 @@ struct ArrElem{
 } ;
 
 ArrElem* parse_array(int fd);
-ArrElem* parse_bulk_str(void);
+ArrElem* parse_bulk_str(int fd);
 void     delete_array(ArrElem* el);

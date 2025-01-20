@@ -49,7 +49,7 @@ get_server_sock(char* service) {
 int
 accept_client(int server_fd){
     struct sockaddr_in client_addr;
-    size_t client_addr_len;
+    socklen_t client_addr_len;
     client_addr_len = sizeof(client_addr);
     return accept(server_fd, (struct sockaddr*)&client_addr, &client_addr_len);
 }
@@ -63,7 +63,6 @@ main() {
 	int server_fd, client_fd;
 	char buff;
     ssize_t rtn;
-	struct sockaddr_in client_addr;
 	server_fd = get_server_sock("6379");
 	if (server_fd == -1) {
 		printf("Socket creation failed: %s...\n", strerror(errno));
@@ -73,18 +72,20 @@ main() {
     client_fd = accept_client(server_fd);
 	printf("Client connected\n");
 	while(1){
-        rtn = recv(client_fd,&buff,(size_t)BUFSIZE-1,0);
+        rtn = recv(client_fd,&buff,1,0);
         if(rtn==-1){
             printf("Invalid data received: %s...\n", strerror(errno));
 		    return -1;
+        }
+        if(!rtn){
+            break;
         }
 		//send(client_fd,msg,strlen(msg),0);
         switch (buff)
         {
         case '*':
-            //parse_array(client_fd);
-            printf("value: %d", string_to_uint("6379"));
-
+            ArrElem* array = parse_array(client_fd);
+            //printf("value: %d", string_to_uint("6379"));
             break;
         
         default:
