@@ -43,7 +43,12 @@ parse_array(int fd){
                 next = parse_bulk_str(fd);
                 break;
             case ASTERISK_BYTE:
-                /* code */
+                ArrElem* first_el = parse_array(fd);
+                if(!first_el){
+                    next = first_el;
+                }else{
+                    next = new_arr_el(first_el,ARRAY,NULL,NULL);
+                }
                 break;
             case PLUS_BYTE:
                 /* code */
@@ -67,7 +72,6 @@ parse_array(int fd){
     }
     return first;
 };
-
 ArrElem* 
 parse_bulk_str(int fd){
     int  str_size = get_el_size(fd);

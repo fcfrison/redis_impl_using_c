@@ -30,7 +30,7 @@ struct ArrElem{
     RedisDtype type;
     ArrElem*   next;
     ArrElem*   prev;
-} ;
+};
 
 ArrElem* parse_array(int fd);
 ArrElem* parse_bulk_str(int fd);
