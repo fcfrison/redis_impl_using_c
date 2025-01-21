@@ -10,7 +10,7 @@ ArrElem* new_arr_el(void* content,
                     ArrElem* prev);
 int  is_valid_terminator(int fd);
 int  get_el_size(int fd);
-void delete_array(ArrElem* el);
+
 int read_exact_bytes(int fd, char* buf, size_t len);
 ArrElem* parse_bulk_str(int fd);
 void log_error(const char *message);
@@ -36,7 +36,7 @@ parse_array(int fd){
     while(inserted_el<(unsigned int)arr_size){
         ArrElem* next;
         if(!read_exact_bytes(fd, &next_char,1)){
-            delete_array(previous);
+            delete_array(previous,1);
             return NULL;
         };
         switch (next_char){
@@ -49,6 +49,7 @@ parse_array(int fd){
                     next = first_el;
                 }else{
                     next = new_arr_el(first_el,ARRAY,NULL,NULL);
+                    first_el->prev = next;
                 }
                 break;
             case PLUS_BYTE:
@@ -58,7 +59,7 @@ parse_array(int fd){
                 break;
         }
         if(!next){
-            delete_array(previous);
+            delete_array(previous,1);
             return NULL;
         }
         if(previous){
@@ -76,6 +77,10 @@ parse_array(int fd){
 ArrElem* 
 parse_bulk_str(int fd){
     int  str_size = get_el_size(fd);
+    if(str_size==ERR_ARRAY_OVERFLOW || str_size==ERR_INV_CHAR){
+        log_error("The string size is invalid.");
+        return NULL;
+    }
     if(!str_size){
         //empty string
         if(!is_valid_terminator(fd)){
@@ -249,8 +254,48 @@ void
 log_error(const char *message) {
     fprintf(stderr, "Error: %s\n", message);
 }
-void
-delete_array(ArrElem* el){
 
+
+/**
+ * Recursively deletes a linked list of array elements and their contents.
+ * Each element can be either a nested array or a bulk string that needs
+ * to be freed individually.
+ *
+ * @param el     Pointer to the array element to start deletion from.
+ *               Can be NULL, in which case the function returns immediately.
+ * @param lp_bck If non-zero, the function will first traverse backwards
+ *               to the start of the list before beginning deletion.
+ *               If zero, deletion starts from the provided element.
+ * 
+ */
+void
+delete_array(ArrElem* el, int lp_bck){
+    if(!el){
+        return;
+    }
+    ArrElem* current = el;
+    ArrElem* next;
+    // looping backwards
+    while(lp_bck && current->prev){
+        current=current->prev;
+    }
+    do {
+        next=current->next;
+        switch (current->type){
+        case ARRAY:
+            delete_array(current->content, 0);
+            free(current);
+            current = next;
+            break;
+        case BULK_STR:
+            free(current->content);
+            free(current);
+            current = next;
+            break;
+        default:
+            break;
+        }
+    } while(next);
 };
+
 

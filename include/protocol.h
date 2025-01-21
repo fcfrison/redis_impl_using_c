@@ -37,5 +37,5 @@ struct ArrElem{
 
 ArrElem* parse_array(int fd);
 ArrElem* parse_bulk_str(int fd);
-void     delete_array(ArrElem* el);
+void delete_array(ArrElem* el, int lp_bck);
 #endif
