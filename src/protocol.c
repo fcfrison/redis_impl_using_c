@@ -254,31 +254,3 @@ delete_array(ArrElem* el){
 
 };
 
-void print_array(ArrElem* arr, int level) {
-    int index = 0;
-    for (ArrElem* temp = arr; temp; temp = temp->next, index++) {
-        for (int i = 0; i < level; i++) {
-            printf("  ");
-        }
-        printf("Node %d:\n", index);
-        for (int i = 0; i < level; i++) {
-            printf("  ");
-        }
-        printf("  ");
-        switch (temp->type) {
-            case BULK_STR:
-            case SIMPLE_STR:
-                printf("Type: STRING, Content: %s\n", (char*)temp->content);
-                break;
-            case ARRAY:
-                printf("Type: ARRAY\n");
-                print_array(temp->content, level + 1);
-                break;
-            case UNDEF_DTYPE:
-                printf("Type: UNDEFINED\n");
-                break;
-            default:
-                printf("Type: UNKNOWN\n");
-        }
-    }
-}

@@ -1,3 +1,5 @@
+#ifndef PROTOCOL_H
+#define PROTOCOL_H
 #define MAX_ARRAY_SIZE (size_t)8192
 #define PROTO_MAX_BULK_SIZE    512000000
 #define ERR_INV_CHAR           -2
@@ -35,5 +37,5 @@ struct ArrElem{
 
 ArrElem* parse_array(int fd);
 ArrElem* parse_bulk_str(int fd);
-void print_array(ArrElem* arr, int level);
 void     delete_array(ArrElem* el);
+#endif
