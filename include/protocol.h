@@ -24,7 +24,8 @@ typedef enum ArraySizeStates{
     NEG_DIGIT_STATE_II = 3,
     END_STATE          = 4
 
-};
+} ArraySizeStates;
+
 struct ArrElem{
     void*      content;
     RedisDtype type;
@@ -34,4 +35,5 @@ struct ArrElem{
 
 ArrElem* parse_array(int fd);
 ArrElem* parse_bulk_str(int fd);
+void print_array(ArrElem* arr, int level);
 void     delete_array(ArrElem* el);

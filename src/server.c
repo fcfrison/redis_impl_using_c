@@ -85,6 +85,7 @@ main() {
         {
         case '*':
             ArrElem* array = parse_array(client_fd);
+            print_array(array,0);
             //printf("value: %d", string_to_uint("6379"));
             break;
         
