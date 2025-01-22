@@ -15,7 +15,7 @@ string_to_uint(char* string){
 }
 void print_array(void* arr, int level) {
     int index = 0;
-    for (BaseNode* temp = (BaseNode*)arr; temp; temp = temp->next, index++) {
+    for (GenericNode* temp = (GenericNode*)arr; temp; temp = temp->node->next, index++) {
         for (int i = 0; i < level; i++) {
             printf("  ");
         }
@@ -24,7 +24,7 @@ void print_array(void* arr, int level) {
             printf("  ");
         }
         printf("  ");
-        switch (temp->type) {
+        switch (temp->node->type) {
             case BULK_STR:
                 printf("Type: STRING, Content: %s\n", ((BulkStringNode*)temp)->content);
             case SIMPLE_STR:

@@ -61,12 +61,13 @@ parse_array(int fd){
         }
         if(!array){
             array = new_array(current,NULL,NULL,arr_size);
-            ((BaseNode*)current)->prev = array;
+            ((GenericNode*)current)->node->prev = array;
+        }else{
+            ((GenericNode*)current)->node->prev = previous;
         }
         if(previous){
-            ((BaseNode*)previous)->next = current;
+            ((GenericNode*)previous)->node->next = current;
         }
-        ((BaseNode*)current)->prev = previous;
         previous = current;
         inserted_el++;
     }
@@ -111,9 +112,9 @@ new_base_node(RedisDtype type,
     if(node==NULL){
         return NULL;
     }
-    node->type    = type;
-    node->next    = next;
-    node->prev    = prev;
+    node->type = type;
+    node->next = next;
+    node->prev = prev;
     return node;
 }
 
@@ -301,24 +302,26 @@ delete_array(void* el, int lp_bck){
     if(!el){
         return;
     }
-    void* current = el;
-    void* next;
+    GenericNode* current = el;
+    GenericNode* next;
     // looping backwards
-    while(lp_bck && ((BaseNode*)current)->prev){
-        current=((BaseNode*)current)->prev;
+    while(lp_bck && current->node->prev){
+        current=current->node->prev;
     }
     do {
-        next=((BaseNode*)current)->next;
-        switch (((BaseNode*)current)->type){
+        next=current->node->next;
+        switch (current->node->type){
             case ARRAY:
-                delete_array(((ArrayNode*)current)->content, 0);
-                free(((ArrayNode*)current)->node);
+                ArrayNode* curr_a = (ArrayNode*)current;
+                delete_array(curr_a->content, 0);
+                free(curr_a->node);
                 current = next;
                 break;
             case BULK_STR:
-                free(((BulkStringNode*)current)->node);
-                free(((BulkStringNode*)current)->content);
-                free((BulkStringNode*)current);
+                BulkStringNode* curr_s = (BulkStringNode*)current;
+                free(curr_s->node);
+                free(curr_s->content);
+                free(curr_s);
                 current = next;
                 break;
             default:

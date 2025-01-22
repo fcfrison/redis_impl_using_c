@@ -13,6 +13,7 @@ typedef struct BaseNode BaseNode;
 typedef struct ArrayNode ArrayNode;
 typedef struct StringNode StringNode;
 typedef struct BulkStringNode BulkStringNode;
+typedef struct GenericNode GenericNode;
 typedef enum{
     UNDEF_DTYPE = -1,
     SIMPLE_STR  =  0,
@@ -30,11 +31,13 @@ typedef enum ArraySizeStates{
     END_STATE          = 4
 
 } ArraySizeStates;
-
+struct GenericNode{
+    BaseNode*   node;
+};
 struct BaseNode{
     RedisDtype  type;
-    void*   next;
-    void*   prev;
+    void*       next;
+    void*       prev;
 };
 
 struct ArrayNode{
