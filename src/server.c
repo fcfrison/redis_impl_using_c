@@ -84,7 +84,7 @@ main() {
         switch (buff)
         {
         case '*':
-            ArrElem* array = parse_array(client_fd);
+            ArrayNode* array = parse_array(client_fd);
             print_array(array,0);
             delete_array(array,1);
             //printf("value: %d", string_to_uint("6379"));

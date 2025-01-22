@@ -13,9 +13,9 @@ string_to_uint(char* string){
     }
     return num;
 }
-void print_array(ArrElem* arr, int level) {
+void print_array(void* arr, int level) {
     int index = 0;
-    for (ArrElem* temp = arr; temp; temp = temp->next, index++) {
+    for (BaseNode* temp = (BaseNode*)arr; temp; temp = temp->next, index++) {
         for (int i = 0; i < level; i++) {
             printf("  ");
         }
@@ -26,12 +26,12 @@ void print_array(ArrElem* arr, int level) {
         printf("  ");
         switch (temp->type) {
             case BULK_STR:
+                printf("Type: STRING, Content: %s\n", ((BulkStringNode*)temp)->content);
             case SIMPLE_STR:
-                printf("Type: STRING, Content: %s\n", (char*)temp->content);
                 break;
             case ARRAY:
                 printf("Type: ARRAY\n");
-                print_array(temp->content, level + 1);
+                print_array(((ArrayNode*)temp)->content, level + 1);
                 break;
             case UNDEF_DTYPE:
                 printf("Type: UNDEFINED\n");

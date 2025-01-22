@@ -9,7 +9,10 @@
 #define PLUS_BYTE              '+'
 #define MINUS_BYTE             '-'
 #define COLON_BYTE             ':'
-typedef struct ArrElem ArrElem;
+typedef struct BaseNode BaseNode;
+typedef struct ArrayNode ArrayNode;
+typedef struct StringNode StringNode;
+typedef struct BulkStringNode BulkStringNode;
 typedef enum{
     UNDEF_DTYPE = -1,
     SIMPLE_STR  =  0,
@@ -28,14 +31,27 @@ typedef enum ArraySizeStates{
 
 } ArraySizeStates;
 
-struct ArrElem{
-    void*      content;
-    RedisDtype type;
-    ArrElem*   next;
-    ArrElem*   prev;
+struct BaseNode{
+    RedisDtype  type;
+    void*   next;
+    void*   prev;
 };
 
-ArrElem* parse_array(int fd);
-ArrElem* parse_bulk_str(int fd);
-void delete_array(ArrElem* el, int lp_bck);
+struct ArrayNode{
+    BaseNode*   node;
+    void*       content;
+    int         size;
+};
+
+struct BulkStringNode{
+    BaseNode*   node;
+    char*       content;
+    int         size;
+};
+
+
+
+ArrayNode* parse_array(int fd);
+BulkStringNode* parse_bulk_str(int fd);
+void delete_array(void* el, int lp_bck);
 #endif

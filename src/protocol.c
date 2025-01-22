@@ -4,53 +4,50 @@
 #include <sys/socket.h>
 #include "../include/protocol.h"
 #include "../include/util.h"
-ArrElem* new_arr_el(void* content,
-                    RedisDtype type,
-                    ArrElem* next,
-                    ArrElem* prev);
+BaseNode* new_base_node(RedisDtype type,void* next,void* prev);
+BulkStringNode* new_bulk_str(char* content, void* next, void* prev,int size);
+ArrayNode* new_array(void* content, void* next, void* prev, int size);
 int  is_valid_terminator(int fd);
 int  get_el_size(int fd);
-
 int read_exact_bytes(int fd, char* buf, size_t len);
-ArrElem* parse_bulk_str(int fd);
+BulkStringNode* parse_bulk_str(int fd);
 void log_error(const char *message);
 
 
-ArrElem*
+ArrayNode*
 parse_array(int fd){
-    // this parse assumes perfectly crafted strings
+    // this parsing assumes perfectly crafted strings
     int arr_size = get_el_size(fd);
     char next_char;
     if(arr_size==-2){
         return NULL;
     }
+    //nill
     if(arr_size==-1){
-        return new_arr_el(NULL,NILL_ARRAY,NULL,NULL);
+        BaseNode* node = new_base_node(NILL_ARRAY,NULL,NULL);
+        return new_array(node,NULL,NULL,1);
+
     }
+    //empty
     if(!arr_size){
-        return new_arr_el(NULL,EMPTY_ARRAY,NULL,NULL);
+        BaseNode* node = new_base_node(EMPTY_ARRAY,NULL,NULL);
+        return new_array(node,NULL,NULL,1);
     }
     unsigned int inserted_el = 0;
-    ArrElem* previous = NULL;
-    ArrElem* first    = NULL;
+    ArrayNode* array = NULL;
+    void*  previous  = NULL;
     while(inserted_el<(unsigned int)arr_size){
-        ArrElem* next;
+        void* current;
         if(!read_exact_bytes(fd, &next_char,1)){
             delete_array(previous,1);
             return NULL;
         };
         switch (next_char){
             case DOLLAR_BYTE:
-                next = parse_bulk_str(fd);
+                current = parse_bulk_str(fd);
                 break;
             case ASTERISK_BYTE:
-                ArrElem* first_el = parse_array(fd);
-                if(!first_el){
-                    next = first_el;
-                }else{
-                    next = new_arr_el(first_el,ARRAY,NULL,NULL);
-                    first_el->prev = next;
-                }
+                current = parse_array(fd);
                 break;
             case PLUS_BYTE:
                 /* code */
@@ -58,23 +55,25 @@ parse_array(int fd){
             default:
                 break;
         }
-        if(!next){
+        if(!current){
             delete_array(previous,1);
             return NULL;
         }
+        if(!array){
+            array = new_array(current,NULL,NULL,arr_size);
+            ((BaseNode*)current)->prev = array;
+        }
         if(previous){
-            previous->next = next;
+            ((BaseNode*)previous)->next = current;
         }
-        next->prev = previous;
-        if(!next->prev){
-            first = next;
-        }
-        previous = next;
+        ((BaseNode*)current)->prev = previous;
+        previous = current;
         inserted_el++;
     }
-    return first;
+    return array;
 };
-ArrElem* 
+
+BulkStringNode* 
 parse_bulk_str(int fd){
     int  str_size = get_el_size(fd);
     if(str_size==ERR_ARRAY_OVERFLOW || str_size==ERR_INV_CHAR){
@@ -86,10 +85,10 @@ parse_bulk_str(int fd){
         if(!is_valid_terminator(fd)){
             return NULL;
         }
-        return new_arr_el("",BULK_STR, NULL, NULL);
+        return new_bulk_str("", NULL, NULL, 0);
     }
     if(str_size==-1){
-        return new_arr_el(NULL, BULK_STR, NULL, NULL);
+        return new_bulk_str(NULL, NULL, NULL, -1);
     }
     if(str_size>PROTO_MAX_BULK_SIZE){
         log_error("The string size is greater than the max bulk size");
@@ -102,22 +101,51 @@ parse_bulk_str(int fd){
     if(!is_valid_terminator(fd)){
         return NULL;
     }
-    return new_arr_el(buf,BULK_STR,NULL,NULL);
+    return new_bulk_str(buf,NULL,NULL,str_size);
 }
-ArrElem* new_arr_el(void* content,
-                    RedisDtype type,
-                    ArrElem* next,
-                    ArrElem* prev){
-    ArrElem* arr_el = (ArrElem*)calloc(1,sizeof(ArrElem));
-    if(arr_el==NULL){
+BaseNode* 
+new_base_node(RedisDtype type,
+         void* next,
+         void* prev){
+    BaseNode* node = (BaseNode*)calloc(1,sizeof(BaseNode));
+    if(node==NULL){
         return NULL;
     }
-    arr_el->content = content;
-    arr_el->type    = type;
-    arr_el->next    = next;
-    arr_el->prev    = prev;
-    return arr_el;
+    node->type    = type;
+    node->next    = next;
+    node->prev    = prev;
+    return node;
 }
+
+ArrayNode*
+new_array(void* content,
+          void* next,
+          void* prev,
+          int size){
+    BaseNode* node = new_base_node(ARRAY,next,prev);
+    ArrayNode* arr = (ArrayNode*)calloc(1,sizeof(ArrayNode));
+    arr->content = content;
+    arr->node    = node;
+    arr->size    = size;
+    return arr;
+         }
+
+BulkStringNode*
+new_bulk_str(char* content,
+             void* next,
+             void* prev,
+             int   size){
+    BaseNode* node = new_base_node(BULK_STR,next,prev);
+    BulkStringNode* arr = (BulkStringNode*)calloc(1,sizeof(BulkStringNode));
+    arr->content = content;
+    arr->node    = node;
+    arr->size    = size;
+    return arr;
+         }
+
+
+
+
 
 /**
 * Checks if the next characters in a file descriptor's receive buffer form a valid CRLF terminator.
@@ -269,31 +297,32 @@ log_error(const char *message) {
  * 
  */
 void
-delete_array(ArrElem* el, int lp_bck){
+delete_array(void* el, int lp_bck){
     if(!el){
         return;
     }
-    ArrElem* current = el;
-    ArrElem* next;
+    void* current = el;
+    void* next;
     // looping backwards
-    while(lp_bck && current->prev){
-        current=current->prev;
+    while(lp_bck && ((BaseNode*)current)->prev){
+        current=((BaseNode*)current)->prev;
     }
     do {
-        next=current->next;
-        switch (current->type){
-        case ARRAY:
-            delete_array(current->content, 0);
-            free(current);
-            current = next;
-            break;
-        case BULK_STR:
-            free(current->content);
-            free(current);
-            current = next;
-            break;
-        default:
-            break;
+        next=((BaseNode*)current)->next;
+        switch (((BaseNode*)current)->type){
+            case ARRAY:
+                delete_array(((ArrayNode*)current)->content, 0);
+                free(((ArrayNode*)current)->node);
+                current = next;
+                break;
+            case BULK_STR:
+                free(((BulkStringNode*)current)->node);
+                free(((BulkStringNode*)current)->content);
+                free((BulkStringNode*)current);
+                current = next;
+                break;
+            default:
+                break;
         }
     } while(next);
 };

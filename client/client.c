@@ -35,8 +35,9 @@ int main() {
         printf("Connection Failed\n");
         return -1;
     }
-    //strcpy(buffer,"*4\r\n$1\r\n1\r\n$1\r\n2\r\n*2\r\n$1\r\na\r\n$1\r\nb\r\n$1\r\n3\r\n");
-    strcpy(buffer,"*4\r\n$1\r\n1\r\n$1\r\n2\n*2\r\n$1\r\na\r\n$1\r\nb\r\n$1\r\n3\r\n");
+    strcpy(buffer,"*4\r\n$1\r\n1\r\n$1\r\n2\r\n*2\r\n$1\r\na\r\n$1\r\nb\r\n$1\r\n3\r\n");
+    //strcpy(buffer,"*4\r\n$1\r\n1\r\n$1\r\n2\n*2\r\n$1\r\na\r\n$1\r\nb\r\n$1\r\n3\r\n");
+    strcpy(buffer,"*2\r\n$4\r\nLLEN\r\n$6\r\nmylist\r\n");
     send(sock, buffer, strlen(buffer), 0);
     // Main communication loop
     // Close the socket
