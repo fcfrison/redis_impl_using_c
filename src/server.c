@@ -81,17 +81,16 @@ main() {
             break;
         }
 		//send(client_fd,msg,strlen(msg),0);
-        switch (buff)
-        {
-        case '*':
-            ArrayNode* array = parse_array(client_fd);
-            print_array(array,0);
-            delete_array(array,1);
-            //printf("value: %d", string_to_uint("6379"));
-            break;
-        
-        default:
-            break;
+        switch (buff){
+            case '*':
+                ArrayNode* array = parse_array(client_fd);
+                print_array(array,0);
+                delete_array(array,1);
+                //printf("value: %d", string_to_uint("6379"));
+                break;
+            
+            default:
+                break;
         }
 
 	}

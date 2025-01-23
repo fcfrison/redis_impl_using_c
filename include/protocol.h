@@ -11,7 +11,6 @@
 #define COLON_BYTE             ':'
 typedef struct BaseNode BaseNode;
 typedef struct ArrayNode ArrayNode;
-typedef struct StringNode StringNode;
 typedef struct BulkStringNode BulkStringNode;
 typedef struct GenericNode GenericNode;
 typedef enum{
