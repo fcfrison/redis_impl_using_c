@@ -11,6 +11,7 @@
 #include <sys/types.h>
 #include "../include/protocol.h"
 #include "../include/util.h"
+#include "../include/cmd_handler.h"
 #define BUFSIZE ((size_t)10)
 #define MAXPENDING 10
 int 
@@ -85,7 +86,9 @@ main() {
             case '*':
                 ArrayNode* array = parse_array(client_fd);
                 print_array(array,0);
-                delete_array(array,1);
+                char* rtn = parse_command(array);
+                printf("%s\n",rtn);
+                //delete_array(array,1);
                 //printf("value: %d", string_to_uint("6379"));
                 break;
             

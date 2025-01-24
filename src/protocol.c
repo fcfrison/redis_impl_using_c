@@ -95,11 +95,13 @@ parse_bulk_str(int fd){
         log_error("The string size is greater than the max bulk size");
         return NULL;
     }
-    char* buf = calloc(str_size,sizeof(char)+1);
+    char* buf = calloc(str_size+1,sizeof(char));
     if(!read_exact_bytes(fd,buf,str_size)){
+        free(buf);
         return NULL;
     }
     if(!is_valid_terminator(fd)){
+        free(buf);
         return NULL;
     }
     return new_bulk_str(buf,NULL,NULL,str_size);
@@ -122,7 +124,7 @@ ArrayNode*
 new_array(void* content,
           void* next,
           void* prev,
-          int size){
+          int   size){
     BaseNode* node = new_base_node(ARRAY,next,prev);
     ArrayNode* arr = (ArrayNode*)calloc(1,sizeof(ArrayNode));
     arr->content = content;
@@ -138,9 +140,10 @@ new_bulk_str(char* content,
              int   size){
     BaseNode* node = new_base_node(BULK_STR,next,prev);
     BulkStringNode* arr = (BulkStringNode*)calloc(1,sizeof(BulkStringNode));
-    arr->content = content;
-    arr->node    = node;
-    arr->size    = size;
+    content[size] = '\0';
+    arr->content  = content;
+    arr->node     = node;
+    arr->size     = size;
     return arr;
          }
 
