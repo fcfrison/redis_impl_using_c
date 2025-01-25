@@ -39,12 +39,63 @@ int main() {
     //strcpy(buffer,"*4\r\n$1\r\n1\r\n$1\r\n2\n*2\r\n$1\r\na\r\n$1\r\nb\r\n$1\r\n3\r\n");
     //strcpy(buffer,"*2\r\n$4\r\nLLEN\r\n$6\r\nmylist\r\n");
     //strcpy(buffer,"*1\r\n$4\r\nPING\r\n");
-    strcpy(buffer,"*2\r\n$4\r\nECHO\r\n$3\r\nhey\r\n");
-    send(sock, buffer, strlen(buffer), 0);
-    // Main communication loop
-    // Close the socket
-    puts("Waiting for the user to type");
-    scanf("%s",(char*)NULL);
+    //strcpy(buffer,"*2\r\n$4\r\nECHO\r\n$3\r\nhey\r\n");
+    /*
+    char* cmd_str[] = {
+        "*2\r\n$4\r\nECHO\r\n$3\r\nhey\r\n",
+        "*2\r\n$4\r\nECHO\r\n$5\r\nhello\r\n",
+        "*2\r\n$4\r\nECHO\r\n$10\r\nredis-test\r\n",
+        "*2\r\n$4\r\nECHO\r\n$9\r\n123456789\r\n",
+        "*2\r\n$4\r\nECHO\r\n$0\r\n\r\n",
+        "*2\r\n$4\r\nECHO\r\n$13\r\nlonger-string\r\n",
+        "*2\r\n$4\r\nECHO\r\n$1\r\na\r\n",
+        "*2\r\n$4\r\nECHO\r\n$2\r\nok\r\n",
+        "*2\r\n$4\r\nECHO\r\n$6\r\ngoodbye\r\n",
+        "*2\r\n$4\r\nECHO\r\n$4\r\ntest\r\n"
+
+    };
+    char* cmd_str_a[] = {
+        "*2\r\n$4\r\nECHO\r\n$12\r\nLine1\nLine2\r\n",  // Comando ECHO com múltiplas linhas
+        "*2\r\n$4\r\nECHO\r\n$15\r\nHey, how are you?\r\n",  // Comando ECHO com uma pergunta
+        "*2\r\n$4\r\nECHO\r\n$17\r\nECHOing the echo!\r\n",  // Comando ECHO com uma frase longa
+        "*2\r\n$4\r\nECHO\r\n$1\r\na\r\n"  // Comando ECHO com uma única letra
+    };
+    */
+    char* cmd_str_a[] = {
+        "*2\r\n$4\r\nECHO\r\n$12\r\nLine1\nLine2\r\n",  // Comando ECHO com múltiplas linhas
+        "*2\r\n$4\r\nECHO\r\n$15\r\nHey, how are you?\r\n",  // Comando ECHO com uma pergunta
+        "*2\r\n$4\r\nECHO\r\n$17\r\nECHOing the echo!\r\n",  // Comando ECHO com uma frase longa
+        "*2\r\n$4\r\nECHO\r\n$1\r\na\r\n"  // Comando ECHO com uma única letra
+    };
+    unsigned char size = 3;
+    ssize_t rtn     = 0;
+    for(unsigned char i=0;i<size;i++){
+        size_t  b_to_send = strlen(cmd_str_a[i]);
+        ssize_t b_sent  = 0;
+        ssize_t rmn_bt  = b_to_send;
+        char*   start_pos = cmd_str_a[i];
+        printf("The size of the string is: %ld\n",b_to_send);
+        while(b_sent<b_to_send){
+            rtn = send(sock, start_pos, rmn_bt, 0);
+            printf("bytes send: %d\n",rtn);
+            if(rtn==-1){
+                close(sock);
+                return 0;
+            }
+            b_sent+=rtn;
+            rmn_bt = b_to_send - b_sent;
+            start_pos+=rtn;
+        }
+    }
+    char* buf  = calloc(1024, sizeof(char));
+    while(1){
+        puts("Client waiting");
+        rtn = recv(sock,buf,1024,0);
+        if(!rtn){
+            break;
+        }
+        puts(buf);
+    }
     close(sock);
     return 0;
 }

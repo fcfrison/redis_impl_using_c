@@ -140,7 +140,9 @@ new_bulk_str(char* content,
              int   size){
     BaseNode* node = new_base_node(BULK_STR,next,prev);
     BulkStringNode* arr = (BulkStringNode*)calloc(1,sizeof(BulkStringNode));
-    content[size] = '\0';
+    if(size){
+        content[size] = '\0';
+    }
     arr->content  = content;
     arr->node     = node;
     arr->size     = size;
@@ -167,8 +169,8 @@ is_valid_terminator(int fd){
     unsigned char state = 0;
     ssize_t ret_val;
     while(1){
-        ret_val = recv(fd, &next_char, 1, 0);
-        if(ret_val==-1){
+        ret_val = read_exact_bytes(fd, &next_char, 1);
+        if(!ret_val){
             return 0;
         }
         switch (state){

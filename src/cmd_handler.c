@@ -20,7 +20,7 @@ parse_command(void* node){
                 BulkStringNode* temp = (BulkStringNode*) gnode;
                 printf("%s",temp->content);
                 if(!strcmp(temp->content,"ECHO")){
-                    return handle_echo_cmd(node);
+                    return handle_echo_cmd(temp->node->next);
                 }
                 return NULL;
             default:
@@ -46,35 +46,36 @@ __handle_echo_cmd(void* node, int* size){
         return NULL;
     }
     GenericNode* gnode = (GenericNode*) node;
+    char *next, *format, *rtn;
     switch (gnode->node->type){
         case ARRAY:
             ArrayNode* array = ((ArrayNode*) node);
             char* elements = __handle_echo_cmd(array->content, size);
-            char* next     = __handle_echo_cmd(gnode->node->next, size);
-            char* format   = "*%d\r\n%s%s";
+            next     = __handle_echo_cmd(gnode->node->next, size);
+            format   = "*%d\r\n%s%s";
             char* arr_size_s = calloc(MAX_BYTES_ARR_SIZE+1, sizeof(char));
             int   arr_size = ((ArrayNode*)gnode)->size;
             snprintf(arr_size_s,MAX_BYTES_ARR_SIZE+1,"%d",arr_size);
             *size += strlen(arr_size_s) + 3;
-            char* arr_ret = calloc(*size+1,sizeof(char));
-            snprintf(arr_ret,*size+1,format,arr_size,elements,next);
+            rtn = calloc(*size+1,sizeof(char));
+            snprintf(rtn,*size+1,format,arr_size,elements,next);
             free(elements);
             free(next);
             free(arr_size_s);
-            return arr_ret;
+            return rtn;
         case BULK_STR:
             BulkStringNode* bulks_node = ((BulkStringNode*)node);
-            char* next_nd = __handle_echo_cmd(gnode->node->next, size);
+            next = __handle_echo_cmd(gnode->node->next, size);
             char* content = bulks_node->content;
-            char* fmt_b_str  = "%d\r\n%s\r\n%s";
+            format  = "$%d\r\n%s\r\n%s";
             char* bs_size = calloc(MAX_BYTES_BULK_STR+1, sizeof(char));
             snprintf(bs_size,(MAX_BYTES_BULK_STR+1),"%d",bulks_node->size);
-            *size+= strlen(bs_size) + 4 + strlen(content);
-            char* blk_str_ret = calloc(*size+1,sizeof(char));
-            snprintf(blk_str_ret,*size+1,fmt_b_str,bulks_node->size,content,next_nd);
-            free(next_nd);
+            *size+= strlen(bs_size) + 5 + strlen(content);
+            rtn = calloc(*size+1,sizeof(char));
+            snprintf(rtn,*size+1,format,bulks_node->size,content,next);
+            free(next);
             free(bs_size);
-            return blk_str_ret;
+            return rtn;
         default:
             break;
     }

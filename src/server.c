@@ -61,8 +61,8 @@ int
 main() {
 	setbuf(stdout, NULL);
 	setbuf(stderr, NULL);
-	int server_fd, client_fd;
-	char buff;
+	int server_fd, client_fd, rtn_v;
+	char buff, *rtn_s;
     ssize_t rtn;
 	server_fd = get_server_sock("6379");
 	if (server_fd == -1) {
@@ -85,9 +85,17 @@ main() {
         switch (buff){
             case '*':
                 ArrayNode* array = parse_array(client_fd);
-                print_array(array,0);
-                char* rtn = parse_command(array);
-                printf("%s\n",rtn);
+                if(array){
+                    print_array(array,0);
+                    rtn_s = parse_command(array);
+                }
+                if(array && rtn_s){
+                    rtn_v = send(client_fd,rtn_s,strlen(rtn_s),0);
+                    if(rtn_v==-1){
+                        continue;
+                    }
+                    free(rtn_s);
+                }
                 //delete_array(array,1);
                 //printf("value: %d", string_to_uint("6379"));
                 break;
