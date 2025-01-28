@@ -9,11 +9,19 @@
 #include <unistd.h>
 #include <netdb.h>
 #include <sys/types.h>
+#include <pthread.h>
 #include "../include/protocol.h"
 #include "../include/util.h"
 #include "../include/cmd_handler.h"
 #define BUFSIZE ((size_t)10)
 #define MAXPENDING 10
+// https://tutorial.codeswithpankaj.com/c-programming/thread
+
+typedef ClientArgs ClientArgs; 
+struct ClientArgs {
+    int client_fd;
+};
+
 int 
 get_server_sock(char* service) {
     struct addrinfo addr_config;
@@ -54,25 +62,23 @@ accept_client(int server_fd){
     client_addr_len = sizeof(client_addr);
     return accept(server_fd, (struct sockaddr*)&client_addr, &client_addr_len);
 }
-//TODO: Implement the ECHO command
 
-
-int
-main() {
-	setbuf(stdout, NULL);
-	setbuf(stderr, NULL);
-	int server_fd, client_fd, rtn_v;
-	char buff, *rtn_s;
+void*
+client_th(void* th_args){
+    pthread_t th_id = pthread_self();
+    // Guarantees that thread resources are deallocated upon return
+    pthread_detach(th_id);
+    int client_fd = ((ClientArgs*)th_args)->client_fd;
+    free(th_args);
+    handle_tcp_client(client_fd);
+    return NULL;
+}
+void
+handle_tcp_client(int client_fd){
+    int  client_fd, rtn_v;
+    char buff, *rtn_s;
     ssize_t rtn;
-	server_fd = get_server_sock("6379");
-	if (server_fd == -1) {
-		printf("Socket creation failed: %s...\n", strerror(errno));
-		return -1;
-	}
-	printf("Waiting for a client to connect...\n");
-    client_fd = accept_client(server_fd);
-	printf("Client connected\n");
-	while(1){
+    while(1){
         rtn = recv(client_fd,&buff,1,0);
         if(rtn==-1){
             printf("Invalid data received: %s...\n", strerror(errno));
@@ -81,7 +87,6 @@ main() {
         if(!rtn){
             break;
         }
-		//send(client_fd,msg,strlen(msg),0);
         switch (buff){
             case '*':
                 ArrayNode* array = parse_array(client_fd);
@@ -95,9 +100,8 @@ main() {
                         continue;
                     }
                     free(rtn_s);
+                    delete_array(array,1);
                 }
-                //delete_array(array,1);
-                //printf("value: %d", string_to_uint("6379"));
                 break;
             
             default:
@@ -105,7 +109,32 @@ main() {
         }
 
 	}
+    close(client_fd);
+}
+
+int
+main() {
+	setbuf(stdout, NULL);
+	setbuf(stderr, NULL);
+	int server_fd, client_fd, rtn_v;
+	char buff, *rtn_s;
+    ssize_t rtn;
+	server_fd = get_server_sock("6379");
+	if (server_fd == -1) {
+		printf("Socket creation failed: %s...\n", strerror(errno));
+		return -1;
+	}
+    while(1){
+	    printf("Waiting for a client to connect...\n");
+        client_fd = accept_client(server_fd);
+        if(client_fd==-1) continue;
+        ClientArgs* args = (ClientArgs*) calloc(1,sizeof(ClientArgs));
+        if(!args) continue;
+        args->client_fd = client_fd;
+        //TODO: implement pthread_create code
+        pthread_create(NULL, NULL, NULL, NULL);
+
+    }
 	close(server_fd);
-	close(client_fd);
 	return 0;
 }

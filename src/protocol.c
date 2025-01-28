@@ -86,7 +86,9 @@ parse_bulk_str(int fd){
         if(!is_valid_terminator(fd)){
             return NULL;
         }
-        return new_bulk_str("", NULL, NULL, 0);
+        char* emp_str = calloc(1,sizeof(char));
+        *emp_str = '\0';
+        return new_bulk_str(emp_str, NULL, NULL, 0);
     }
     if(str_size==-1){
         return new_bulk_str(NULL, NULL, NULL, -1);

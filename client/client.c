@@ -60,14 +60,13 @@ int main() {
         "*2\r\n$4\r\nECHO\r\n$17\r\nECHOing the echo!\r\n",  // Comando ECHO com uma frase longa
         "*2\r\n$4\r\nECHO\r\n$1\r\na\r\n"  // Comando ECHO com uma única letra
     };
-    */
     char* cmd_str_a[] = {
-        "*2\r\n$4\r\nECHO\r\n$12\r\nLine1\nLine2\r\n",  // Comando ECHO com múltiplas linhas
-        "*2\r\n$4\r\nECHO\r\n$15\r\nHey, how are you?\r\n",  // Comando ECHO com uma pergunta
-        "*2\r\n$4\r\nECHO\r\n$17\r\nECHOing the echo!\r\n",  // Comando ECHO com uma frase longa
-        "*2\r\n$4\r\nECHO\r\n$1\r\na\r\n"  // Comando ECHO com uma única letra
+        "*2\r\n$4\r\nECHO\r\n$3\r\nhey\r\n*2\r\n$4\r\nECHO\r\n$5\r\nhello\r\n*2\r\n$4\r\nECHO\r\n$10\r\nredis-test\r\n*2\r\n$4\r\nECHO\r\n$9\r\n123456789\r\n*2\r\n$4\r\nECHO\r\n$0\r\n\r\n*2\r\n$4\r\nECHO\r\n$13\r\nlonger-string\r\n*2\r\n$4\r\nECHO\r\n$1\r\na\r\n*2\r\n$4\r\nECHO\r\n$2\r\nok\r\n*2\r\n$4\r\nECHO\r\n$6\r\ngoodbye\r\n*2\r\n$4\r\nECHO\r\n$4\r\ntest\r\n"
+
     };
-    unsigned char size = 3;
+    */
+    char* cmd_str_a[] = {"*2\r\n$4\r\nECHO\r\n$0\r\n\r\n"};
+    unsigned char size = 1;
     ssize_t rtn     = 0;
     for(unsigned char i=0;i<size;i++){
         size_t  b_to_send = strlen(cmd_str_a[i]);
