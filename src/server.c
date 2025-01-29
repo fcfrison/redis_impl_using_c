@@ -13,16 +13,19 @@
 #include "../include/protocol.h"
 #include "../include/util.h"
 #include "../include/cmd_handler.h"
-#define BUFSIZE ((size_t)10)
-#define MAXPENDING 10
+#include "../include/server.h"
 // https://tutorial.codeswithpankaj.com/c-programming/thread
 
-typedef ClientArgs ClientArgs; 
-struct ClientArgs {
-    int client_fd;
-};
+int   get_server_sock(char* service);
+int   accept_client(int server_fd);
+void* client_th(void* th_args);
+void  handle_tcp_client(int client_fd);
+int   create_thread_safe(int client_fd);
+// global vars
+unsigned int    nbr_th = 0;
+pthread_mutex_t nbr_th_mutex;
 
-int 
+int
 get_server_sock(char* service) {
     struct addrinfo addr_config;
     memset(&addr_config, 0, sizeof(addr_config));
@@ -75,14 +78,14 @@ client_th(void* th_args){
 }
 void
 handle_tcp_client(int client_fd){
-    int  client_fd, rtn_v;
+    int  rtn_v;
     char buff, *rtn_s;
     ssize_t rtn;
     while(1){
         rtn = recv(client_fd,&buff,1,0);
         if(rtn==-1){
             printf("Invalid data received: %s...\n", strerror(errno));
-		    return -1;
+		    break;
         }
         if(!rtn){
             break;
@@ -110,15 +113,60 @@ handle_tcp_client(int client_fd){
 
 	}
     close(client_fd);
+    pthread_mutex_lock(&nbr_th_mutex);
+    nbr_th--;
+    pthread_mutex_unlock(&nbr_th_mutex);
 }
-
+int
+create_thread_safe(int client_fd){
+    ClientArgs* args = (ClientArgs*) calloc(1,sizeof(ClientArgs));
+    pthread_t   thid;
+    if(!args){
+        return -1;
+    }
+    args->client_fd = client_fd;
+    pthread_mutex_lock(&nbr_th_mutex);
+    if(nbr_th>MAX_THREAD_N){
+        free(args);
+        // TODO: improve error message handling
+        char* msg = "Error: connection refused.";
+        send(client_fd,msg,sizeof(msg),MSG_WAITALL);
+        close(client_fd);
+        pthread_mutex_unlock(&nbr_th_mutex);
+        return -1;
+    }
+    int err = pthread_create(&thid, NULL, client_th, args);
+    if(err==0){
+        nbr_th++;
+        pthread_mutex_unlock(&nbr_th_mutex);
+        return 1;
+    }
+    if(err!=0) {
+        switch(err) {
+            case EAGAIN:
+                log_error("System lacks resources to create thread");
+                break;
+            case EINVAL:
+                log_error("Invalid thread attributes.");
+                break;
+            case ENOMEM:
+                log_error("Insufficient memory to create thread");
+                break;
+            default:
+                log_error("Unknown error creating thread");
+        }
+    }
+    char* msg = "Error: connection refused.";
+    send(client_fd,msg,sizeof(msg),MSG_WAITALL);
+    close(client_fd);
+    pthread_mutex_unlock(&nbr_th_mutex);
+    return -1;
+}
 int
 main() {
 	setbuf(stdout, NULL);
 	setbuf(stderr, NULL);
-	int server_fd, client_fd, rtn_v;
-	char buff, *rtn_s;
-    ssize_t rtn;
+	int server_fd, client_fd;
 	server_fd = get_server_sock("6379");
 	if (server_fd == -1) {
 		printf("Socket creation failed: %s...\n", strerror(errno));
@@ -128,12 +176,7 @@ main() {
 	    printf("Waiting for a client to connect...\n");
         client_fd = accept_client(server_fd);
         if(client_fd==-1) continue;
-        ClientArgs* args = (ClientArgs*) calloc(1,sizeof(ClientArgs));
-        if(!args) continue;
-        args->client_fd = client_fd;
-        //TODO: implement pthread_create code
-        pthread_create(NULL, NULL, NULL, NULL);
-
+        create_thread_safe(client_fd);
     }
 	close(server_fd);
 	return 0;

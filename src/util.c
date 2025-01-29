@@ -41,3 +41,7 @@ void print_array(void* arr, int level) {
         }
     }
 }
+void 
+log_error(const char *message) {
+    fprintf(stderr, "Error: %s\n", message);
+}

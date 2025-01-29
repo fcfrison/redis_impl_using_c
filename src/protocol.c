@@ -11,7 +11,6 @@ int  is_valid_terminator(int fd);
 int  get_el_size(int fd);
 int read_exact_bytes(int fd, char* buf, size_t len);
 BulkStringNode* parse_bulk_str(int fd);
-void log_error(const char *message);
 
 
 ArrayNode*
@@ -286,10 +285,7 @@ read_exact_bytes(int fd, char* buf, size_t len){
     }
     return 1;
     };
-void 
-log_error(const char *message) {
-    fprintf(stderr, "Error: %s\n", message);
-}
+
 
 
 /**
