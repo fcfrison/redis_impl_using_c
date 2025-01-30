@@ -8,6 +8,9 @@
 SendErrorInfo*
 categorize_send_error(int err_no){
     SendErrorInfo* err = (SendErrorInfo*) calloc(1,sizeof(SendErrorInfo));
+    if(!err){
+        return NULL;
+    }
     err->error_code = err_no;
     switch (err_no){
         case EINTR:
@@ -16,19 +19,29 @@ categorize_send_error(int err_no){
         case EWOULDBLOCK:
             err->category = SEND_ERROR_RECOVERABLE;
             break;
-        case ECONNRESET:
-        case EPIPE:
-        case ENOTCONN:
-        case EBADF:
-        case ENOTSOCK:
-        case EFAULT:
-        case EINVAL:
-            err->category = SEND_ERROR_FATAL;
-            break;
         default:
             err->category = SEND_ERROR_FATAL;
             break;
         }
+    return err;
+}
+RecvErrorInfo*
+categorize_recv_error(int err_no){
+    RecvErrorInfo* err = (RecvErrorInfo*) calloc(1,sizeof(RecvErrorInfo));
+    if(!err){
+        return NULL;
+    }
+    err->error_code = err_no;
+    switch (err_no){
+    case EINTR:
+    case EIO:
+    case ENOBUFS:
+        err->category = RECV_ERROR_RECOVERABLE;
+        break;
+    default:
+        err->category = RECV_ERROR_FATAL;
+        break;
+    }
     return err;
 }
 void

@@ -4,6 +4,7 @@
 #include <sys/socket.h>
 #include "../include/protocol.h"
 #include "../include/util.h"
+#include "../include/server.h"
 BaseNode* new_base_node(RedisDtype type,void* next,void* prev);
 BulkStringNode* new_bulk_str(char* content, void* next, void* prev,int size);
 ArrayNode* new_array(void* content, void* next, void* prev, int size);
@@ -276,20 +277,6 @@ get_el_size(int fd){
     free(buf);
     return is_negative?(-1)*arr_size:arr_size;
     };
-int 
-read_exact_bytes(int fd, char* buf, size_t len){
-    ssize_t rtn = recv(fd,buf,len,MSG_WAITALL);
-    if(!rtn){
-        log_error("connection closed by the client");
-        return 0;
-    }
-    if((size_t)rtn < len){
-        log_error("less bytes than the expected were received");
-        return 0;
-    }
-    return 1;
-    };
-
 
 
 /**

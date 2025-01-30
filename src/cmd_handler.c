@@ -27,10 +27,9 @@ parse_command(void* node){
                 return NULL;
         }
     }
+    return NULL;
 }
 
-//TODO: currently, the ECHO command is returning the ECHO string back.
-//It should echo back only the content.
 char* 
 handle_echo_cmd(void* fst_nod){
     int* size = calloc(1,sizeof(int));

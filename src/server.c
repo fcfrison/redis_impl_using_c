@@ -1,16 +1,15 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/socket.h>
 #include <netinet/in.h>
 #include <netinet/ip.h>
-#include <netdb.h>
+#include <arpa/inet.h>
 #include <string.h>
 #include <errno.h>
-#include <unistd.h>
-#include <netdb.h>
-#include <sys/types.h>
 #include <pthread.h>
 #include <unistd.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
 #include "../include/protocol.h"
 #include "../include/util.h"
 #include "../include/cmd_handler.h"
@@ -22,11 +21,17 @@ int   accept_client(int server_fd);
 void* client_th(void* th_args);
 void  handle_tcp_client(int client_fd);
 int   create_thread_safe(int client_fd);
-int   send_resp_to_clnt(void* buf,
-                        size_t size,
-                        int client_fd,
-                        unsigned int n_retries,
-                        unsigned int retry_tm);
+ssize_t send_resp_to_clnt(void* buf,
+                          size_t size,
+                          int client_fd,
+                          unsigned int n_retries,
+                          unsigned int retry_tm);
+ssize_t recv_resp_fm_clnt(void* buf,
+                          size_t size,
+                          int fd,
+                          unsigned int n_retries,
+                          unsigned int retry_tm);
+
 // global vars
 unsigned int    nbr_th = 0;
 pthread_mutex_t nbr_th_mutex;
@@ -104,7 +109,7 @@ handle_tcp_client(int client_fd){
                     rtn_s = parse_command(array);
                 }
                 if(array && rtn_s){
-                    rtn_v = send(client_fd,rtn_s,strlen(rtn_s),0);
+                    rtn_v = send_resp_to_clnt(rtn_s,strlen(rtn_s)+1, client_fd,3,500);
                     if(rtn_v==-1){
                         continue;
                     }
@@ -137,7 +142,6 @@ create_thread_safe(int client_fd){
         pthread_mutex_unlock(&nbr_th_mutex);
         free(args);
         send_resp_to_clnt(err_msg,strlen(err_msg)+1, client_fd,3,500);
-        //TODO: check For some reason, when the client_fd is closed, the socket is resending the message
         close(client_fd);
         return -1;
     }
@@ -170,7 +174,7 @@ create_thread_safe(int client_fd){
 * categorizes the error type and retries non-fatal errors after
 * waiting retry_tm milliseconds, up to n_retries times.
 */
-int
+ssize_t
 send_resp_to_clnt(void* buf,
                   size_t size,
                   int client_fd,
@@ -179,12 +183,18 @@ send_resp_to_clnt(void* buf,
     ssize_t rtn;
     rtn = send(client_fd,buf,size,MSG_WAITALL);
     if(rtn!=-1){
-        return (int)rtn;
+        return rtn;
     }
     perror("Error: ");
-    SendErrorInfo* err_info;
+    SendErrorInfo* err_info = NULL;
     for(size_t i = 0; i < n_retries; i++){
+        if(err_info){
+            free(err_info);
+        }
         err_info = categorize_send_error(errno);
+        if(!err_info){
+            return rtn;
+        }
         if((err_info->category==SEND_ERROR_FATAL) || (msleep(retry_tm,3)==-1)){
             free(err_info);
             return rtn;
@@ -201,6 +211,58 @@ send_resp_to_clnt(void* buf,
     return rtn;
     
 }
+ssize_t
+recv_resp_fm_clnt(void* buf,
+                  size_t size,
+                  int fd,
+                  unsigned int n_retries,
+                  unsigned int retry_tm){
+    ssize_t rtn;
+    rtn = recv(fd, buf, size, MSG_WAITALL);
+    if(rtn!=-1){
+        return rtn;
+    }
+    perror("Error: ");
+    RecvErrorInfo* err_info;
+    for(size_t i = 0; i < n_retries; i++){
+        if(err_info){
+            free(err_info);
+        }
+        err_info = categorize_recv_error(errno);
+        if(!err_info){
+            return rtn;
+        }
+        if((err_info->category==RECV_ERROR_FATAL) || (msleep(retry_tm,3)==-1)){
+            free(err_info);
+            return rtn;
+        }
+        rtn = recv(fd, buf, size, MSG_WAITALL);
+        if(rtn!=-1){
+            break;
+            }
+        perror("Error: ");
+    }
+    if(err_info){
+        free(err_info);
+    }
+    return rtn;
+}
+int 
+read_exact_bytes(int fd, char* buf, size_t len){
+    ssize_t rtn;
+    rtn = recv_resp_fm_clnt(buf, len, fd, 3, 500);
+    if(!rtn){
+        log_error("connection closed by the client");
+        return 0;
+    }
+    if((size_t)rtn < len){
+        log_error("less bytes than the expected were received");
+        return 0;
+    }
+    return 1;
+    };
+
+
 int
 main() {
 	setbuf(stdout, NULL);
