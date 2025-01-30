@@ -166,25 +166,29 @@ new_bulk_str(char* content,
 */
 int 
 is_valid_terminator(int fd){
-    unsigned char next_char;
+    char* next_char = calloc(1,sizeof(char));
     unsigned char state = 0;
     ssize_t ret_val;
     while(1){
-        ret_val = read_exact_bytes(fd, &next_char, 1);
+        ret_val = read_exact_bytes(fd, next_char, 1);
         if(!ret_val){
+            free(next_char);
             return 0;
         }
         switch (state){
             case 0:
-                if(next_char!='\r'){
+                if(*next_char!='\r'){
+                    free(next_char);
                     return 0;
                 }
                 state = 1;
                 break;
             case 1:
-                if(next_char!='\n'){
+                if(*next_char!='\n'){
+                    free(next_char);
                     return 0;
                 }
+                free(next_char);
                 return 1;
         }
     }

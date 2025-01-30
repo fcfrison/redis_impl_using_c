@@ -4,4 +4,5 @@
 unsigned int string_to_uint(char* string);
 void print_array(void* arr, int level);
 void log_error(const char *message);
+int msleep(long msec,int max_retries);
 #endif
