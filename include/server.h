@@ -5,7 +5,8 @@
 
 typedef struct ClientArgs ClientArgs; 
 struct ClientArgs {
-    int client_fd;
+    int   fd;
+    void* (*fptr)(int);
 };
 int read_exact_bytes(int fd, char* buf, size_t len);
 #endif

@@ -16,3 +16,6 @@ https://stackoverflow.com/questions/1694164/is-errno-thread-safe
 
 ### multithreading in C lang
 https://tutorial.codeswithpankaj.com/c-programming/thread
+
+### Function pointers in C
+https://www.geeksforgeeks.org/function-pointer-in-c/

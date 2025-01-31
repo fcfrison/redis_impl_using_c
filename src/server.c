@@ -19,7 +19,7 @@
 int   get_server_sock(char* service);
 int   accept_client(int server_fd);
 void* client_th(void* th_args);
-void  handle_tcp_client(int client_fd);
+void* app_code(int fd);
 int   create_thread_safe(int client_fd);
 ssize_t send_resp_to_clnt(void* buf,
                           size_t size,
@@ -31,6 +31,7 @@ ssize_t recv_resp_fm_clnt(void* buf,
                           int fd,
                           unsigned int n_retries,
                           unsigned int retry_tm);
+ClientArgs* init_client(void);
 
 // global vars
 unsigned int    nbr_th = 0;
@@ -82,18 +83,20 @@ client_th(void* th_args){
     pthread_t th_id = pthread_self();
     // Guarantees that thread resources are deallocated upon return
     pthread_detach(th_id);
-    int client_fd = ((ClientArgs*)th_args)->client_fd;
+    int fd = ((ClientArgs*)th_args)->fd;
+    void* (*fnc)(int);
+    fnc = ((ClientArgs*)th_args)->fptr;
     free(th_args);
-    handle_tcp_client(client_fd);
+    fnc(fd);
     return NULL;
 }
-void
-handle_tcp_client(int client_fd){
+void*
+app_code(int fd){
     int  rtn_v;
     char buff, *rtn_s;
     ssize_t rtn;
     while(1){
-        rtn = recv(client_fd,&buff,1,0);
+        rtn = recv_resp_fm_clnt(&buff, 1, fd, 3, .500);
         if(rtn==-1){
             printf("Invalid data received: %s...\n", strerror(errno));
 		    break;
@@ -103,13 +106,13 @@ handle_tcp_client(int client_fd){
         }
         switch (buff){
             case '*':
-                ArrayNode* array = parse_array(client_fd);
+                ArrayNode* array = parse_array(fd);
                 if(array){
                     print_array(array,0);
                     rtn_s = parse_command(array);
                 }
                 if(array && rtn_s){
-                    rtn_v = send_resp_to_clnt(rtn_s,strlen(rtn_s)+1, client_fd,3,500);
+                    rtn_v = send_resp_to_clnt(rtn_s,strlen(rtn_s)+1, fd,3,500);
                     if(rtn_v==-1){
                         continue;
                     }
@@ -123,28 +126,28 @@ handle_tcp_client(int client_fd){
         }
 
 	}
-    close(client_fd);
+    close(fd);
     pthread_mutex_lock(&nbr_th_mutex);
     nbr_th--;
     pthread_mutex_unlock(&nbr_th_mutex);
+    return NULL;
 }
 int
-create_thread_safe(int client_fd){
-    ClientArgs* args = (ClientArgs*) calloc(1,sizeof(ClientArgs));
-    pthread_t   thid;
+create_thread_safe(int fd){
     char* err_msg = "Error: connection refused.";
+    if(nbr_th>MAX_THREAD_N){
+        pthread_mutex_unlock(&nbr_th_mutex);
+        send_resp_to_clnt(err_msg,strlen(err_msg)+1, fd,3,500);
+        close(fd);
+        return -1;
+    }
+    ClientArgs* args = init_client();
     if(!args){
         return -1;
     }
-    args->client_fd = client_fd;
+    pthread_t thid;
+    args->fd = fd;
     pthread_mutex_lock(&nbr_th_mutex);
-    if(nbr_th>MAX_THREAD_N){
-        pthread_mutex_unlock(&nbr_th_mutex);
-        free(args);
-        send_resp_to_clnt(err_msg,strlen(err_msg)+1, client_fd,3,500);
-        close(client_fd);
-        return -1;
-    }
     int err = pthread_create(&thid, NULL, client_th, args);
     if(err==0){
         nbr_th++;
@@ -153,11 +156,23 @@ create_thread_safe(int client_fd){
     }
     pthread_mutex_unlock(&nbr_th_mutex);
     log_pthread_create_err(err);
-    send_resp_to_clnt(err_msg,strlen(err_msg)+1, client_fd,3,500);
-    close(client_fd);
+    send_resp_to_clnt(err_msg,strlen(err_msg)+1, fd,3,500);
+    close(fd);
     return -1;
 }
 
+// I didn't figure it out yet how to make the server completely app agnostic
+// Probably some routine created by the user
+ClientArgs*
+init_client(void){
+    ClientArgs* args = (ClientArgs*) calloc(1,sizeof(ClientArgs));
+    if(!args){
+        return NULL;
+    }
+    args->fd   = -1;
+    args->fptr = &app_code;
+    return args;
+}
 /**
 * Sends data to a client socket with retry capability.
 *
