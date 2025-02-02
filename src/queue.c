@@ -8,10 +8,10 @@
  * @param q Pointer to the Queue structure
  * @return Pointer to the front ListNode, or NULL if queue is NULL
  */
-ListNode* 
+void* 
 get_front(Queue* q){
-    if(!q) return NULL;
-    return q->front;
+    if(!q || !q->front) return NULL;
+    return q->front->data;
 }
 /**
  * Gets the rear node of the queue.
@@ -19,10 +19,10 @@ get_front(Queue* q){
  * @param q Pointer to the Queue structure
  * @return Pointer to the rear ListNode, or NULL if queue is NULL
  */
-ListNode* 
+void* 
 get_rear(Queue* q){
-    if(!q) return NULL;
-    return q->rear;
+    if(!q || !q->rear) return NULL;
+    return q->rear->data;
 }
 /**
  * Adds a new node to the rear of the queue.

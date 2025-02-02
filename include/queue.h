@@ -35,14 +35,14 @@ struct Queue{
     ListNode*     rear;
     void          (*enqueue)(Queue* q, void* n);
     void*         (*dequeue)(Queue* q);
-    ListNode*     (*get_front)(Queue* q);
-    ListNode*     (*get_rear)(Queue* q);
+    void*         (*get_front)(Queue* q);
+    void*         (*get_rear)(Queue* q);
     void          (*delete_queue)(Queue* q);
     destructor_fn destructor;  // Function pointer to cleanup data
 };
 
-ListNode* get_front(Queue* q);
-ListNode* get_rear(Queue* q);
+void* get_front(Queue* q);
+void* get_rear(Queue* q);
 Queue*    init_queue(void(*func)(void*));
 void      enqueue(Queue* q, void* n);
 void*     dequeue(Queue* q);

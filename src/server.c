@@ -10,11 +10,14 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
+#include <time.h>
+#include <sys/time.h>
 #include "../include/protocol.h"
 #include "../include/util.h"
 #include "../include/cmd_handler.h"
 #include "../include/server.h"
 #include "../include/errors.h"
+#include "../include/queue.h"
 
 int   get_server_sock(char* service);
 int   accept_client(int server_fd);
@@ -261,7 +264,7 @@ recv_resp_fm_clnt(void* buf,
         free(err_info);
     }
     return rtn;
-}
+};
 int 
 read_exact_bytes(int fd, char* buf, size_t len){
     ssize_t rtn;
@@ -278,6 +281,62 @@ read_exact_bytes(int fd, char* buf, size_t len){
     };
 
 
+
+void
+th_req_queue_mngr(Queue* req_q,
+                  pthread_mutex_t req_q_mtx,
+                  Queue* denial_q,
+                  pthread_mutex_t denial_q_mtx
+                     ){
+    if(!req_q){
+        return;
+    }
+    Request* front;
+    struct timespec curr_tm, diff;
+    float delta = .75;
+    //curr_time
+    while(1){
+        msleep(1000,3);
+        pthread_mutex_lock(&req_q_mtx);
+        clock_gettime(CLOCK_MONOTONIC, &curr_tm);
+        front = req_q->get_front(&req_q);
+        do{
+            if(!front){
+                break;
+            }
+            get_time_diff(&curr_tm, &(front->ts), &diff);
+            if(!was_waiting_time_exceeded(&diff,delta)){
+                break;
+            }
+            // waiting time exceeded
+            req_q->dequeue(req_q);
+            // insert "front" Request in the denied connection queue
+            // TODO: understand how to implement the producer consumer model
+            front = req_q->get_front(&req_q);
+        } while(front);
+        pthread_mutex_unlock(&req_q_mtx);
+        
+    }
+};
+char
+was_waiting_time_exceeded(struct timespec* diff,
+                 float  dlt_sec){
+    if(dlt_sec>MAX_QUEUE_TIME){
+        dlt_sec=(float)MAX_QUEUE_TIME;
+    }
+    float diff_t = diff->tv_sec + diff->tv_nsec/1e9;
+    if(diff_t>dlt_sec) return 1;
+    return 0;
+}
+
+void
+get_time_diff(struct timespec* a, 
+              struct timespec* b,
+              struct timespec* diff){
+        diff->tv_sec  = a->tv_sec - b->tv_sec;
+        diff->tv_nsec = a->tv_nsec - b->tv_nsec;
+        return;
+    }
 int
 main() {
 	setbuf(stdout, NULL);
