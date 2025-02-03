@@ -25,6 +25,7 @@ int   accept_client(int server_fd);
 void* client_th(void* th_args);
 void* app_code(int fd);
 int   create_thread_safe(int client_fd);
+ClientArgs* init_client(void);
 ssize_t send_resp_to_clnt(void* buf,
                           size_t size,
                           int client_fd,
@@ -35,7 +36,25 @@ ssize_t recv_resp_fm_clnt(void* buf,
                           int fd,
                           unsigned int n_retries,
                           unsigned int retry_tm);
-ClientArgs* init_client(void);
+int  read_exact_bytes(int fd, char* buf, size_t len);
+void mutex_unlock(pthread_mutex_t* mtx);
+void mutex_lock(pthread_mutex_t* mtx,
+           unsigned int     n_retries,
+           unsigned int     retry_tm);
+void th_req_queue_mngr(Queue*           req_q,
+                  pthread_mutex_t* req_q_mtx,
+                  Queue*           excd_tm_q,
+                  pthread_mutex_t* excd_tm_mtx,
+                  sem_t*           excd_tm_sem
+                     );
+void th_excd_tm_q_mngr(Queue*           excd_tm_q,
+                       pthread_mutex_t* excd_tm_mtx,
+                       sem_t*           excd_tm_sem);
+char was_waiting_time_exceeded(struct timespec* diff,
+                               float  dlt_sec);
+void get_time_diff(struct timespec* a, 
+                   struct timespec* b,
+                   struct timespec* diff);
 
 // global vars
 unsigned int    nbr_th = 0;
@@ -131,9 +150,9 @@ app_code(int fd){
 
 	}
     close(fd);
-    pthread_mutex_lock(&nbr_th_mutex);
+    mutex_lock(&nbr_th_mutex,3,1000);
     nbr_th--;
-    pthread_mutex_unlock(&nbr_th_mutex);
+    mutex_unlock(&nbr_th_mutex);
     return NULL;
 }
 int
@@ -151,14 +170,14 @@ create_thread_safe(int fd){
     }
     pthread_t thid;
     args->fd = fd;
-    pthread_mutex_lock(&nbr_th_mutex);
+    mutex_lock(&nbr_th_mutex,3,1000);
     int err = pthread_create(&thid, NULL, client_th, args);
     if(err==0){
         nbr_th++;
-        pthread_mutex_unlock(&nbr_th_mutex);
+        mutex_unlock(&nbr_th_mutex);
         return 1;
     }
-    pthread_mutex_unlock(&nbr_th_mutex);
+    mutex_unlock(&nbr_th_mutex);
     log_pthread_create_err(err);
     send_resp_to_clnt(err_msg,strlen(err_msg)+1, fd,3,500);
     close(fd);
@@ -242,7 +261,7 @@ recv_resp_fm_clnt(void* buf,
         return rtn;
     }
     perror("Error: ");
-    RecvErrorInfo* err_info;
+    RecvErrorInfo* err_info = NULL;
     for(size_t i = 0; i < n_retries; i++){
         if(err_info){
             free(err_info);
@@ -266,6 +285,7 @@ recv_resp_fm_clnt(void* buf,
     }
     return rtn;
 };
+
 int 
 read_exact_bytes(int fd, char* buf, size_t len){
     ssize_t rtn;
@@ -281,8 +301,67 @@ read_exact_bytes(int fd, char* buf, size_t len){
     return 1;
     };
 
+/**
+ * Attempts to lock a mutex with retry and error handling capabilities.
+ *
+ * @param mtx Pointer to the pthread mutex to be locked
+ * @param n_retries Maximum number of retry attempts if initial lock fails
+ * @param retry_tm Time (in milliseconds) to wait between retry attempts
+ *
+ * @error_handling
+ * - Prints error details using perror()
+ * - Exits the program if:
+ *   1. Error categorization fails
+ *   2. A fatal error is encountered
+ *   3. Sleep between retries fails
+ *   4. Maximum retry attempts are exhausted
+ * @warning Terminates the entire program on persistent lock failures
+ */
+void
+mutex_lock(pthread_mutex_t* mtx,
+           unsigned int     n_retries,
+           unsigned int     retry_tm){
+    int rtn;
+    rtn = pthread_mutex_lock(mtx);
+    if(rtn==0){
+        return;
+    }
+    perror("Error: ");
+    PthreadMutexLockErrorInfo* err_info = NULL;
+    for(size_t i = 0; i < n_retries; i++){
+        if(err_info){
+            free(err_info);
+        }
+        err_info = categorize_mtx_lck_error(rtn);
+        if(!err_info){
+            exit(EXIT_FAILURE);
+        }
+        if((err_info->category==ERROR_FATAL) || (msleep(retry_tm,3)==-1)){
+            free(err_info);
+            exit(EXIT_FAILURE);
+        }
+        rtn = pthread_mutex_lock(mtx);
+        if(rtn==0){
+            free(err_info);
+            return;
+            }
+        perror("Error: ");
+    }
+    if(err_info){
+        free(err_info);
+    }
+    exit(EXIT_FAILURE);
+};
 
-
+void 
+mutex_unlock(pthread_mutex_t* mtx){
+    int rtn;
+    rtn = pthread_mutex_unlock(mtx);
+    if(rtn==0){
+        return;
+    }
+    exit(EXIT_FAILURE);
+}
 void
 th_req_queue_mngr(Queue*           req_q,
                   pthread_mutex_t* req_q_mtx,
@@ -299,7 +378,7 @@ th_req_queue_mngr(Queue*           req_q,
     //curr_time
     while(1){
         msleep(500,3);
-        pthread_mutex_lock(req_q_mtx);
+        mutex_lock(req_q_mtx,3,1000);
         clock_gettime(CLOCK_MONOTONIC, &curr_tm);
         request = req_q->get_front(&req_q);
         do{
@@ -313,9 +392,9 @@ th_req_queue_mngr(Queue*           req_q,
             // waiting time exceeded
             req_q->dequeue(req_q);
             // insert "front" Request in the denied connection queue
-            // TODO: create routines for dealing with errors in pthread_mutex_lock and pthread_mutex_unlock
-            pthread_mutex_lock(excd_tm_sem);
+            mutex_lock(excd_tm_sem,3,1000);
             excd_tm_q->enqueue(excd_tm_q,request);
+            // TODO: create routines for dealing with errors in pthread_mutex_unlock
             pthread_mutex_unlock(excd_tm_sem);
             // signal th_excd_tm_q_mngr
             semp_post(excd_tm_sem);
@@ -330,22 +409,22 @@ void
 th_excd_tm_q_mngr(Queue*           excd_tm_q,
                   pthread_mutex_t* excd_tm_mtx,
                   sem_t*           excd_tm_sem){
-        Request* rq;
-        char* msg = "Timeout Error: the connection couldn't be established";
-        while(1){
-            //TODO: create routine to handle the sem_wait sycall
-            sem_wait(excd_tm_sem);
-            pthread_mutex_lock(excd_tm_mtx);
-            rq = excd_tm_q->dequeue(excd_tm_q);
-            pthread_mutex_unlock(excd_tm_mtx);
-            if(!rq){
-                continue;
-            }
-            send_resp_to_clnt(msg,strlen(msg)+1,rq->fd,3,1000);
-            close(rq->fd);
-            free(rq->ts);
-            free(rq);         
+    Request* rq;
+    char* msg = "Timeout Error: the connection couldn't be established";
+    while(1){
+        //TODO: create routine to handle the sem_wait sycall
+        sem_wait(excd_tm_sem);
+        mutex_lock(excd_tm_mtx,3,1000);
+        rq = excd_tm_q->dequeue(excd_tm_q);
+        pthread_mutex_unlock(excd_tm_mtx);
+        if(!rq){
+            continue;
         }
+        send_resp_to_clnt(msg,strlen(msg)+1,rq->fd,3,1000);
+        close(rq->fd);
+        free(rq->ts);
+        free(rq);         
+    }
 }
 
 char

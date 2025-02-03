@@ -44,6 +44,20 @@ categorize_recv_error(int err_no){
     }
     return err;
 }
+PthreadMutexLockErrorInfo*
+categorize_mtx_lck_error(int err_no){
+    RecvErrorInfo* err = (RecvErrorInfo*) calloc(1,sizeof(RecvErrorInfo));
+    switch (err_no){
+    case EOWNERDEAD:
+        err->category = ERROR_RECOVERABLE;
+        break;
+    
+    default:
+        err->category = ERROR_FATAL;
+        break;
+    }
+    return err;
+}
 void
 log_pthread_create_err(int err_code){
     switch(err_code) {
