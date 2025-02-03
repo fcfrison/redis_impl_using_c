@@ -41,10 +41,10 @@ struct Queue{
     destructor_fn destructor;  // Function pointer to cleanup data
 };
 
-void* get_front(Queue* q);
-void* get_rear(Queue* q);
-Queue*    init_queue(void(*func)(void*));
-void      enqueue(Queue* q, void* n);
-void*     dequeue(Queue* q);
-void      delete_queue(Queue* q);
+void*  get_front(Queue* q);
+void*  get_rear(Queue* q);
+Queue* init_queue(void(*func)(void*));
+void   enqueue(Queue* q, void* n);
+void*  dequeue(Queue* q);
+void   delete_queue(Queue* q);
 #endif

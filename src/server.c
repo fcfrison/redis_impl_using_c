@@ -12,6 +12,7 @@
 #include <netdb.h>
 #include <time.h>
 #include <sys/time.h>
+#include <semaphore.h>
 #include "../include/protocol.h"
 #include "../include/util.h"
 #include "../include/cmd_handler.h"
@@ -213,7 +214,7 @@ send_resp_to_clnt(void* buf,
         if(!err_info){
             return rtn;
         }
-        if((err_info->category==SEND_ERROR_FATAL) || (msleep(retry_tm,3)==-1)){
+        if((err_info->category==ERROR_FATAL) || (msleep(retry_tm,3)==-1)){
             free(err_info);
             return rtn;
         }
@@ -250,7 +251,7 @@ recv_resp_fm_clnt(void* buf,
         if(!err_info){
             return rtn;
         }
-        if((err_info->category==RECV_ERROR_FATAL) || (msleep(retry_tm,3)==-1)){
+        if((err_info->category==ERROR_FATAL) || (msleep(retry_tm,3)==-1)){
             free(err_info);
             return rtn;
         }
@@ -283,44 +284,73 @@ read_exact_bytes(int fd, char* buf, size_t len){
 
 
 void
-th_req_queue_mngr(Queue* req_q,
-                  pthread_mutex_t req_q_mtx,
-                  Queue* denial_q,
-                  pthread_mutex_t denial_q_mtx
+th_req_queue_mngr(Queue*           req_q,
+                  pthread_mutex_t* req_q_mtx,
+                  Queue*           excd_tm_q,
+                  pthread_mutex_t* excd_tm_mtx,
+                  sem_t*           excd_tm_sem
                      ){
     if(!req_q){
         return;
     }
-    Request* front;
+    Request*        request;
     struct timespec curr_tm, diff;
-    float delta = .75;
+    float           delta = 1.0;
     //curr_time
     while(1){
-        msleep(1000,3);
-        pthread_mutex_lock(&req_q_mtx);
+        msleep(500,3);
+        pthread_mutex_lock(req_q_mtx);
         clock_gettime(CLOCK_MONOTONIC, &curr_tm);
-        front = req_q->get_front(&req_q);
+        request = req_q->get_front(&req_q);
         do{
-            if(!front){
+            if(!request){
                 break;
             }
-            get_time_diff(&curr_tm, &(front->ts), &diff);
+            get_time_diff(&curr_tm, request->ts, &diff);
             if(!was_waiting_time_exceeded(&diff,delta)){
                 break;
             }
             // waiting time exceeded
             req_q->dequeue(req_q);
             // insert "front" Request in the denied connection queue
-            // TODO: understand how to implement the producer consumer model
-            front = req_q->get_front(&req_q);
-        } while(front);
+            // TODO: create routines for dealing with errors in pthread_mutex_lock and pthread_mutex_unlock
+            pthread_mutex_lock(excd_tm_sem);
+            excd_tm_q->enqueue(excd_tm_q,request);
+            pthread_mutex_unlock(excd_tm_sem);
+            // signal th_excd_tm_q_mngr
+            semp_post(excd_tm_sem);
+            request = req_q->get_front(&req_q);
+        } while(request);
         pthread_mutex_unlock(&req_q_mtx);
         
     }
 };
+
+void
+th_excd_tm_q_mngr(Queue*           excd_tm_q,
+                  pthread_mutex_t* excd_tm_mtx,
+                  sem_t*           excd_tm_sem){
+        Request* rq;
+        char* msg = "Timeout Error: the connection couldn't be established";
+        while(1){
+            //TODO: create routine to handle the sem_wait sycall
+            sem_wait(excd_tm_sem);
+            pthread_mutex_lock(excd_tm_mtx);
+            rq = excd_tm_q->dequeue(excd_tm_q);
+            pthread_mutex_unlock(excd_tm_mtx);
+            if(!rq){
+                continue;
+            }
+            send_resp_to_clnt(msg,strlen(msg)+1,rq->fd,3,1000);
+            close(rq->fd);
+            free(rq->ts);
+            free(rq);         
+        }
+}
+
 char
 was_waiting_time_exceeded(struct timespec* diff,
-                 float  dlt_sec){
+                          float  dlt_sec){
     if(dlt_sec>MAX_QUEUE_TIME){
         dlt_sec=(float)MAX_QUEUE_TIME;
     }

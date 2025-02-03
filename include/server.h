@@ -8,7 +8,7 @@ typedef struct ClientArgs ClientArgs;
 
 struct Request{
     int fd;
-    struct timespec ts;
+    struct timespec* ts;
 };
 
 struct ClientArgs {
@@ -21,7 +21,7 @@ get_time_diff(struct timespec* a,
               struct timespec* b,
               struct timespec* diff);
 char
-has_time_expired(struct timespec* diff,
+was_waiting_time_exceeded(struct timespec* diff,
                  float  dlt_sec);
 
 int read_exact_bytes(int fd, char* buf, size_t len);
