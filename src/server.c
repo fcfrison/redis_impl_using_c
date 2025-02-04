@@ -22,9 +22,7 @@
 
 int   get_server_sock(char* service);
 int   accept_client(int server_fd);
-void* client_th(void* th_args);
 void* app_code(int fd);
-int   create_thread_safe(int client_fd);
 ClientArgs* init_client(void);
 ssize_t send_resp_to_clnt(void* buf,
                           size_t size,
@@ -62,12 +60,15 @@ ThreadFunc* init_th_req_queue_mgr(Queue*           req_q,
                                    pthread_mutex_t* excd_tm_mtx,
                                    sem_t*           excd_tm_sem);
 Request* init_request(int fd);
-void* run_thread(void* _args);
-void create_thread(void* args);
-// global vars
-unsigned int    nbr_th = 0;
-pthread_mutex_t nbr_th_mutex;
-
+void*    run_thread(void* _args);
+void     create_thread(void* args);
+void*    app_worker(void* _args);
+ThreadFunc* init_worker_th(Queue*           req_q,
+                           pthread_mutex_t* req_q_mtx,
+                           sem_t*           req_q_sem);
+void create_workers_pool(pthread_mutex_t* req_q_mtx,
+                         Queue*           req_q,
+                         sem_t*           req_q_sem);
 int
 get_server_sock(char* service) {
     struct addrinfo addr_config;
@@ -109,18 +110,7 @@ accept_client(int server_fd){
     return accept(server_fd, (struct sockaddr*)&client_addr, &client_addr_len);
 }
 
-void*
-client_th(void* th_args){
-    pthread_t th_id = pthread_self();
-    // Guarantees that thread resources are deallocated upon return
-    pthread_detach(th_id);
-    int fd = ((ClientArgs*)th_args)->fd;
-    void* (*fnc)(int);
-    fnc = ((ClientArgs*)th_args)->fptr;
-    free(th_args);
-    fnc(fd);
-    return NULL;
-}
+
 void*
 app_code(int fd){
     int  rtn_v;
@@ -158,38 +148,7 @@ app_code(int fd){
 
 	}
     close(fd);
-    mutex_lock(&nbr_th_mutex,3,1000);
-    nbr_th--;
-    mutex_unlock(&nbr_th_mutex);
     return NULL;
-}
-int
-create_thread_safe(int fd){
-    char* err_msg = "Error: connection refused.";
-    if(nbr_th>MAX_THREAD_N){
-        pthread_mutex_unlock(&nbr_th_mutex);
-        send_resp_to_clnt(err_msg,strlen(err_msg)+1, fd,3,500);
-        close(fd);
-        return -1;
-    }
-    ClientArgs* args = init_client();
-    if(!args){
-        return -1;
-    }
-    pthread_t thid;
-    args->fd = fd;
-    mutex_lock(&nbr_th_mutex,3,1000);
-    int err = pthread_create(&thid, NULL, client_th, args);
-    if(err==0){
-        nbr_th++;
-        mutex_unlock(&nbr_th_mutex);
-        return 1;
-    }
-    mutex_unlock(&nbr_th_mutex);
-    log_pthread_create_err(err);
-    send_resp_to_clnt(err_msg,strlen(err_msg)+1, fd,3,500);
-    close(fd);
-    return -1;
 }
 
 // I didn't figure it out yet how to make the server completely app agnostic
@@ -381,6 +340,9 @@ init_th_req_queue_mgr(
     
     ThreadFunc* th_func = (ThreadFunc*)calloc(1,sizeof(ThreadFunc));
     ThReqQueueMngrArgs* th_func_args = (ThReqQueueMngrArgs*) calloc(1,sizeof(ThReqQueueMngrArgs));
+    if(!th_func || !th_func_args){
+        exit(EXIT_FAILURE);
+    }
     th_func_args->req_q       = req_q;
     th_func_args->req_q_mtx   = req_q_mtx;
     th_func_args->excd_tm_q   = excd_tm_q;
@@ -397,6 +359,9 @@ init_th_excd_tm_q_mgr(Queue*           excd_tm_q,
                       sem_t*           excd_tm_sem){
     ThreadFunc*   th_func = (ThreadFunc*)calloc(1,sizeof(ThreadFunc));
     ThExcdTmQMgr* th_func_args = (ThExcdTmQMgr*)calloc(1,sizeof(ThExcdTmQMgr));
+    if(!th_func || !th_func_args){
+        exit(EXIT_FAILURE);
+    }
     th_func_args->excd_tm_q   = excd_tm_q;
     th_func_args->excd_tm_mtx = excd_tm_mtx;
     th_func_args->excd_tm_sem = excd_tm_sem;
@@ -452,8 +417,8 @@ th_req_queue_mgr(void* args){
 
 void*
 th_excd_tm_q_mgr(void* args){
-    ThExcdTmQMgr* _args =  (ThExcdTmQMgr*) args;
-    Queue*           excd_tm_q = _args->excd_tm_q;
+    ThExcdTmQMgr*    _args       =  (ThExcdTmQMgr*) args;
+    Queue*           excd_tm_q   = _args->excd_tm_q;
     pthread_mutex_t* excd_tm_mtx = _args->excd_tm_mtx;
     sem_t*           excd_tm_sem = _args->excd_tm_sem;
     free(args);
@@ -525,6 +490,50 @@ void create_thread(void* args){
     }
     exit(EXIT_FAILURE);
 }
+void*
+app_worker(void* _args){
+    AppWorker* args = (AppWorker*)_args;
+    Request*   rq = NULL;
+    while(1){
+        sem_wait(args->req_q_sem);
+        mutex_lock(args->req_q_mtx,3,1000);
+        rq = (Request*)args->req_q->dequeue(args->req_q);
+        mutex_unlock(args->req_q_mtx);
+        if(rq){
+            app_code(rq->fd);
+        }
+    }
+    return NULL;
+}
+ThreadFunc*
+init_worker_th(Queue*           req_q,
+               pthread_mutex_t* req_q_mtx,
+               sem_t*           req_q_sem){
+
+    ThreadFunc* th_func     = (ThreadFunc*)calloc(1,sizeof(ThreadFunc));
+    AppWorker* th_func_args = (AppWorker*) calloc(1,sizeof(AppWorker));
+    if(!th_func || !th_func_args){
+        exit(EXIT_FAILURE);
+    }
+    th_func_args->req_q       = req_q;
+    th_func_args->req_q_mtx   = req_q_mtx;
+    th_func_args->req_q_sem   = req_q_sem;
+    th_func->fptr             = &app_worker;
+    th_func->args             = (void*) th_func_args;
+    return th_func;
+    }
+void
+create_workers_pool(pthread_mutex_t* req_q_mtx,
+                    Queue*           req_q,
+                    sem_t*           req_q_sem){
+    unsigned int nr_thds_created = 0;
+    while(nr_thds_created<MAX_APP_WORKERS){
+        ThreadFunc* th = init_worker_th(req_q, req_q_mtx, req_q_sem);
+        create_thread((void*)th);
+        nr_thds_created++;
+    }
+
+}
 int
 main() {
     pthread_mutex_t*    excd_tm_mtx = (pthread_mutex_t*)calloc(1,sizeof(pthread_mutex_t));
@@ -533,6 +542,7 @@ main() {
     Queue*              req_q       = init_queue(NULL);
     pthread_mutexattr_t attr;
     sem_t*              excd_tm_sem = (sem_t*)calloc(1,sizeof(sem_t));
+    sem_t*              req_q_sem   = (sem_t*)calloc(1,sizeof(sem_t));
 	int server_fd, client_fd;
     // initialize mutexes
     pthread_mutexattr_init(&attr);
@@ -542,12 +552,14 @@ main() {
     pthread_mutexattr_destroy(&attr);
     // initialize semaphores
     sem_init(excd_tm_sem, 0, 0);
+    sem_init(req_q_sem, 0, 0);
     // initialize th_req_queue_mgr
     ThreadFunc* th_rq_q_mng =  init_th_req_queue_mgr(req_q, req_q_mtx, excd_tm_q, excd_tm_mtx,excd_tm_sem);
     create_thread((void*)th_rq_q_mng);
     // initialize th_excd_tm_q_mgr
     ThreadFunc* th_exd_tm_mgr = init_th_excd_tm_q_mgr(excd_tm_q,excd_tm_mtx,excd_tm_sem);
     create_thread((void*)th_exd_tm_mgr);
+    create_workers_pool(req_q_mtx, req_q, req_q_sem);
 	server_fd = get_server_sock("6379");
 	if (server_fd == -1) {
 		printf("Socket creation failed: %s...\n", strerror(errno));
@@ -562,6 +574,7 @@ main() {
         pthread_mutex_lock(req_q_mtx);
         req_q->enqueue(req_q,rq);
         pthread_mutex_unlock(req_q_mtx);
+        sem_post(req_q_sem);
     }
 	close(server_fd);
     // TODO: the clean up routines are bellow. Probably,
@@ -572,12 +585,12 @@ main() {
     pthread_mutex_destroy(req_q_mtx);
     pthread_mutex_destroy(excd_tm_mtx);
     sem_destroy(excd_tm_sem);
+    sem_destroy(req_q_sem);
     free(th_rq_q_mng->args);
     free(th_rq_q_mng);
     free(th_exd_tm_mgr->args);
     free(th_exd_tm_mgr);
     free(req_q);
     free(excd_tm_q);
-    
 	return 0;
 }
