@@ -1,4 +1,5 @@
 #ifndef QUEUE_H
+#define QUEUE_H
 typedef void (*destructor_fn)(void*);
 typedef struct Queue Queue;
 typedef struct ListNode ListNode;

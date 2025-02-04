@@ -46,7 +46,7 @@ categorize_recv_error(int err_no){
 }
 PthreadMutexLockErrorInfo*
 categorize_mtx_lck_error(int err_no){
-    RecvErrorInfo* err = (RecvErrorInfo*) calloc(1,sizeof(RecvErrorInfo));
+    PthreadMutexLockErrorInfo* err = (PthreadMutexLockErrorInfo*) calloc(1,sizeof(PthreadMutexLockErrorInfo));
     switch (err_no){
     case EOWNERDEAD:
         err->category = ERROR_RECOVERABLE;
