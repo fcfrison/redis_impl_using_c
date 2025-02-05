@@ -19,3 +19,6 @@ https://tutorial.codeswithpankaj.com/c-programming/thread
 
 ### Function pointers in C
 https://www.geeksforgeeks.org/function-pointer-in-c/
+
+### recv - set timeout
+https://stackoverflow.com/questions/2876024/linux-is-there-a-read-or-recv-from-socket-with-timeout
