@@ -18,7 +18,6 @@ parse_command(void* node){
                 break;
             case BULK_STR:
                 BulkStringNode* temp = (BulkStringNode*) gnode;
-                printf("%s",temp->content);
                 if(!strcmp(temp->content,"ECHO")){
                     return handle_echo_cmd(temp->node->next);
                 }

@@ -3,27 +3,29 @@
 
 typedef struct SendErrorInfo SendErrorInfo;
 typedef struct RecvErrorInfo RecvErrorInfo;
+typedef struct PthreadMutexLockErrorInfo PthreadMutexLockErrorInfo;
 
 typedef enum {
-    SEND_ERROR_RECOVERABLE,
-    SEND_ERROR_FATAL
-} SendErrorCategory;
+    ERROR_RECOVERABLE,
+    ERROR_FATAL
+} ErrorCategory;
 
 struct SendErrorInfo{
     int error_code;
-    SendErrorCategory category;
+    ErrorCategory category;
 };
+struct PthreadMutexLockErrorInfo{
+    int error_code;
+    ErrorCategory category;
 
-typedef enum {
-    RECV_ERROR_RECOVERABLE,
-    RECV_ERROR_FATAL
-} RecvErrorCategory;
+};
 
 struct RecvErrorInfo{
     int error_code;
-    RecvErrorCategory category;
+    ErrorCategory category;
 };
 void log_pthread_create_err(int err_code);
 SendErrorInfo* categorize_send_error(int err_no);
 RecvErrorInfo* categorize_recv_error(int err_no);
+PthreadMutexLockErrorInfo* categorize_mtx_lck_error(int err_no);
 #endif

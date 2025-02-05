@@ -17,10 +17,10 @@ categorize_send_error(int err_no){
         case ENOBUFS:
         case EMSGSIZE:
         case EWOULDBLOCK:
-            err->category = SEND_ERROR_RECOVERABLE;
+            err->category = ERROR_RECOVERABLE;
             break;
         default:
-            err->category = SEND_ERROR_FATAL;
+            err->category = ERROR_FATAL;
             break;
         }
     return err;
@@ -33,13 +33,27 @@ categorize_recv_error(int err_no){
     }
     err->error_code = err_no;
     switch (err_no){
-    case EINTR:
-    case EIO:
-    case ENOBUFS:
-        err->category = RECV_ERROR_RECOVERABLE;
+        case EINTR:
+        case EIO:
+        case ENOBUFS:
+            err->category = ERROR_RECOVERABLE;
+            break;
+        default:
+            err->category = ERROR_FATAL;
+            break;
+    }
+    return err;
+}
+PthreadMutexLockErrorInfo*
+categorize_mtx_lck_error(int err_no){
+    PthreadMutexLockErrorInfo* err = (PthreadMutexLockErrorInfo*) calloc(1,sizeof(PthreadMutexLockErrorInfo));
+    switch (err_no){
+    case EOWNERDEAD:
+        err->category = ERROR_RECOVERABLE;
         break;
+    
     default:
-        err->category = RECV_ERROR_FATAL;
+        err->category = ERROR_FATAL;
         break;
     }
     return err;

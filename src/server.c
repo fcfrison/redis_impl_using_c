@@ -10,35 +10,72 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
+#include <time.h>
+#include <sys/time.h>
+#include <semaphore.h>
 #include "../include/protocol.h"
 #include "../include/util.h"
 #include "../include/cmd_handler.h"
 #include "../include/server.h"
 #include "../include/errors.h"
+#include "../include/queue.h"
+#include "../include/app.h"
 
-int   get_server_sock(char* service);
+int read_exact_bytes(int fd, char* buf, size_t len);
+int   get_server_sock(char* service, int maxpending);
 int   accept_client(int server_fd);
-void* client_th(void* th_args);
-void* app_code(int fd);
-int   create_thread_safe(int client_fd);
-ssize_t send_resp_to_clnt(void* buf,
-                          size_t size,
-                          int client_fd,
-                          unsigned int n_retries,
-                          unsigned int retry_tm);
-ssize_t recv_resp_fm_clnt(void* buf,
-                          size_t size,
-                          int fd,
-                          unsigned int n_retries,
-                          unsigned int retry_tm);
-ClientArgs* init_client(void);
 
-// global vars
-unsigned int    nbr_th = 0;
-pthread_mutex_t nbr_th_mutex;
+
+int  read_exact_bytes(int fd, char* buf, size_t len);
+void mutex_unlock(pthread_mutex_t* mtx);
+void mutex_lock(pthread_mutex_t* mtx,
+           unsigned int     n_retries,
+           unsigned int     retry_tm);
+ThreadFunc* init_th_req_queue_mgr(Queue*           req_q,
+                                  pthread_mutex_t* req_q_mtx,
+                                  Queue*           excd_tm_q,
+                                  pthread_mutex_t* excd_tm_mtx,
+                                  sem_t*           excd_tm_sem,
+                                  int              max_queue_time);
+
+ThreadFunc* init_th_excd_tm_q_mgr(Queue*           excd_tm_q,
+                                  pthread_mutex_t* excd_tm_mtx,
+                                  sem_t*           excd_tm_sem);
+void* th_req_queue_mgr(void* args);
+void* th_excd_tm_q_mgr(void* args);
+char was_waiting_time_exceeded(struct timespec* diff,
+                               float  dlt_sec,
+                               int    max_queue_time);
+void get_time_diff(struct timespec* a, 
+                   struct timespec* b,
+                   struct timespec* diff);
+Request* init_request(int fd);
+void*    run_thread(void* _args);
+void     create_thread(void* args);
+void*    app_worker(void* _args);
+ThreadFunc*
+init_worker_th(Queue*           req_q,
+               pthread_mutex_t* req_q_mtx,
+               sem_t*           req_q_sem,
+               unsigned int     id,
+               void*            (*fptr)(void*),
+               time_t           recv_timeout);
+
+void
+create_workers_pool(pthread_mutex_t* req_q_mtx,
+                    Queue*           req_q,
+                    sem_t*           req_q_sem,
+                    void*            (*fptr)(void*),
+                    unsigned int      max_app_workers,
+                    time_t           recv_timeout);
+
+void set_recv_tmout(int fd, time_t sec, suseconds_t usec);
 
 int
-get_server_sock(char* service) {
+get_server_sock(char* service, int maxpending) {
+    if(maxpending<1){
+        exit(EXIT_FAILURE);
+    }
     struct addrinfo addr_config;
     memset(&addr_config, 0, sizeof(addr_config));
     addr_config.ai_family   = AF_INET6;
@@ -60,7 +97,7 @@ get_server_sock(char* service) {
         }
 
         int bind_result = bind(fd, l_item->ai_addr, l_item->ai_addrlen);
-        int listen_result = listen(fd, MAXPENDING);
+        int listen_result = listen(fd, maxpending);
         if ((bind_result == 0) && (listen_result == 0)) {
             int val = 1;
             setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &val, sizeof(val)); // Enable the option
@@ -78,101 +115,8 @@ accept_client(int server_fd){
     return accept(server_fd, (struct sockaddr*)&client_addr, &client_addr_len);
 }
 
-void*
-client_th(void* th_args){
-    pthread_t th_id = pthread_self();
-    // Guarantees that thread resources are deallocated upon return
-    pthread_detach(th_id);
-    int fd = ((ClientArgs*)th_args)->fd;
-    void* (*fnc)(int);
-    fnc = ((ClientArgs*)th_args)->fptr;
-    free(th_args);
-    fnc(fd);
-    return NULL;
-}
-void*
-app_code(int fd){
-    int  rtn_v;
-    char buff, *rtn_s;
-    ssize_t rtn;
-    while(1){
-        rtn = recv_resp_fm_clnt(&buff, 1, fd, 3, .500);
-        if(rtn==-1){
-            printf("Invalid data received: %s...\n", strerror(errno));
-		    break;
-        }
-        if(!rtn){
-            break;
-        }
-        switch (buff){
-            case '*':
-                ArrayNode* array = parse_array(fd);
-                if(array){
-                    print_array(array,0);
-                    rtn_s = parse_command(array);
-                }
-                if(array && rtn_s){
-                    rtn_v = send_resp_to_clnt(rtn_s,strlen(rtn_s)+1, fd,3,500);
-                    if(rtn_v==-1){
-                        continue;
-                    }
-                    free(rtn_s);
-                    delete_array(array,1);
-                }
-                break;
-            
-            default:
-                break;
-        }
 
-	}
-    close(fd);
-    pthread_mutex_lock(&nbr_th_mutex);
-    nbr_th--;
-    pthread_mutex_unlock(&nbr_th_mutex);
-    return NULL;
-}
-int
-create_thread_safe(int fd){
-    char* err_msg = "Error: connection refused.";
-    if(nbr_th>MAX_THREAD_N){
-        pthread_mutex_unlock(&nbr_th_mutex);
-        send_resp_to_clnt(err_msg,strlen(err_msg)+1, fd,3,500);
-        close(fd);
-        return -1;
-    }
-    ClientArgs* args = init_client();
-    if(!args){
-        return -1;
-    }
-    pthread_t thid;
-    args->fd = fd;
-    pthread_mutex_lock(&nbr_th_mutex);
-    int err = pthread_create(&thid, NULL, client_th, args);
-    if(err==0){
-        nbr_th++;
-        pthread_mutex_unlock(&nbr_th_mutex);
-        return 1;
-    }
-    pthread_mutex_unlock(&nbr_th_mutex);
-    log_pthread_create_err(err);
-    send_resp_to_clnt(err_msg,strlen(err_msg)+1, fd,3,500);
-    close(fd);
-    return -1;
-}
 
-// I didn't figure it out yet how to make the server completely app agnostic
-// Probably some routine created by the user
-ClientArgs*
-init_client(void){
-    ClientArgs* args = (ClientArgs*) calloc(1,sizeof(ClientArgs));
-    if(!args){
-        return NULL;
-    }
-    args->fd   = -1;
-    args->fptr = &app_code;
-    return args;
-}
 /**
 * Sends data to a client socket with retry capability.
 *
@@ -210,7 +154,7 @@ send_resp_to_clnt(void* buf,
         if(!err_info){
             return rtn;
         }
-        if((err_info->category==SEND_ERROR_FATAL) || (msleep(retry_tm,3)==-1)){
+        if((err_info->category==ERROR_FATAL) || (msleep(retry_tm,3)==-1)){
             free(err_info);
             return rtn;
         }
@@ -218,7 +162,7 @@ send_resp_to_clnt(void* buf,
         if(rtn!=-1){
             break;
             }
-        perror("Error: ");
+        //perror("Error: ");
     }
     if(err_info){
         free(err_info);
@@ -227,9 +171,9 @@ send_resp_to_clnt(void* buf,
     
 }
 ssize_t
-recv_resp_fm_clnt(void* buf,
-                  size_t size,
-                  int fd,
+recv_resp_fm_clnt(void*        buf,
+                  size_t       size,
+                  int          fd,
                   unsigned int n_retries,
                   unsigned int retry_tm){
     ssize_t rtn;
@@ -238,7 +182,7 @@ recv_resp_fm_clnt(void* buf,
         return rtn;
     }
     perror("Error: ");
-    RecvErrorInfo* err_info;
+    RecvErrorInfo* err_info = NULL;
     for(size_t i = 0; i < n_retries; i++){
         if(err_info){
             free(err_info);
@@ -247,7 +191,7 @@ recv_resp_fm_clnt(void* buf,
         if(!err_info){
             return rtn;
         }
-        if((err_info->category==RECV_ERROR_FATAL) || (msleep(retry_tm,3)==-1)){
+        if((err_info->category==ERROR_FATAL) || (msleep(retry_tm,3)==-1)){
             free(err_info);
             return rtn;
         }
@@ -261,7 +205,8 @@ recv_resp_fm_clnt(void* buf,
         free(err_info);
     }
     return rtn;
-}
+};
+
 int 
 read_exact_bytes(int fd, char* buf, size_t len){
     ssize_t rtn;
@@ -277,24 +222,370 @@ read_exact_bytes(int fd, char* buf, size_t len){
     return 1;
     };
 
+/**
+ * Attempts to lock a mutex with retry and error handling capabilities.
+ *
+ * @param mtx Pointer to the pthread mutex to be locked
+ * @param n_retries Maximum number of retry attempts if initial lock fails
+ * @param retry_tm Time (in milliseconds) to wait between retry attempts
+ *
+ * @error_handling
+ * - Prints error details using perror()
+ * - Exits the program if:
+ *   1. Error categorization fails
+ *   2. A fatal error is encountered
+ *   3. Sleep between retries fails
+ *   4. Maximum retry attempts are exhausted
+ * @warning Terminates the entire program on persistent lock failures
+ */
+void
+mutex_lock(pthread_mutex_t* mtx,
+           unsigned int     n_retries,
+           unsigned int     retry_tm){
+    int rtn;
+    rtn = pthread_mutex_lock(mtx);
+    if(rtn==0){
+        return;
+    }
+    perror("Error: ");
+    PthreadMutexLockErrorInfo* err_info = NULL;
+    for(size_t i = 0; i < n_retries; i++){
+        if(err_info){
+            free(err_info);
+        }
+        err_info = categorize_mtx_lck_error(rtn);
+        if(!err_info){
+            exit(EXIT_FAILURE);
+        }
+        if((err_info->category==ERROR_FATAL) || (msleep(retry_tm,3)==-1)){
+            free(err_info);
+            exit(EXIT_FAILURE);
+        }
+        rtn = pthread_mutex_lock(mtx);
+        if(rtn==0){
+            free(err_info);
+            return;
+            }
+        perror("Error: ");
+    }
+    if(err_info){
+        free(err_info);
+    }
+    exit(EXIT_FAILURE);
+};
 
-int
-main() {
-	setbuf(stdout, NULL);
-	setbuf(stderr, NULL);
+void 
+mutex_unlock(pthread_mutex_t* mtx){
+    int rtn;
+    rtn = pthread_mutex_unlock(mtx);
+    if(rtn==0){
+        return;
+    }
+    exit(EXIT_FAILURE);
+};
+
+ThreadFunc*
+init_th_req_queue_mgr(
+    Queue*           req_q,
+    pthread_mutex_t* req_q_mtx,
+    Queue*           excd_tm_q,
+    pthread_mutex_t* excd_tm_mtx,
+    sem_t*           excd_tm_sem,
+    int              max_queue_time){
     
+    ThreadFunc* th_func = (ThreadFunc*)calloc(1,sizeof(ThreadFunc));
+    ThReqQueueMngrArgs* th_func_args = (ThReqQueueMngrArgs*) calloc(1,sizeof(ThReqQueueMngrArgs));
+    if(!th_func || !th_func_args){
+        exit(EXIT_FAILURE);
+    }
+    th_func_args->req_q          = req_q;
+    th_func_args->req_q_mtx      = req_q_mtx;
+    th_func_args->excd_tm_q      = excd_tm_q;
+    th_func_args->excd_tm_mtx    = excd_tm_mtx;
+    th_func_args->excd_tm_sem    = excd_tm_sem;
+    th_func_args->max_queue_time = max_queue_time;
+    th_func->fptr             = &th_req_queue_mgr;
+    th_func->args             = (void*) th_func_args;
+    return th_func;
+    }
+
+ThreadFunc*
+init_th_excd_tm_q_mgr(Queue*           excd_tm_q,
+                      pthread_mutex_t* excd_tm_mtx,
+                      sem_t*           excd_tm_sem){
+    ThreadFunc*   th_func = (ThreadFunc*)calloc(1,sizeof(ThreadFunc));
+    ThExcdTmQMgr* th_func_args = (ThExcdTmQMgr*)calloc(1,sizeof(ThExcdTmQMgr));
+    if(!th_func || !th_func_args){
+        exit(EXIT_FAILURE);
+    }
+    th_func_args->excd_tm_q   = excd_tm_q;
+    th_func_args->excd_tm_mtx = excd_tm_mtx;
+    th_func_args->excd_tm_sem = excd_tm_sem;
+    th_func->fptr             = &th_excd_tm_q_mgr;
+    th_func->args             = (void*)th_func_args;
+    return th_func;
+}
+void*
+th_req_queue_mgr(void* args){
+    ThReqQueueMngrArgs* _args       = (ThReqQueueMngrArgs*) args;
+    Queue*           req_q          = _args->req_q;
+    pthread_mutex_t* req_q_mtx      = _args->req_q_mtx;  
+    Queue*           excd_tm_q      = _args->excd_tm_q; 
+    pthread_mutex_t* excd_tm_mtx    = _args->excd_tm_mtx;
+    sem_t*           excd_tm_sem    = _args->excd_tm_sem;
+    int              max_queue_time = _args->max_queue_time; 
+    free(args);
+    if(!req_q){
+        return NULL;
+    }
+    Request*        request;
+    struct timespec curr_tm, diff;
+    float           delta = 1.0;
+    //curr_time
+    while(1){
+        msleep(1000,3);
+        mutex_lock(req_q_mtx,3,1000);
+        clock_gettime(CLOCK_MONOTONIC, &curr_tm);
+        request = req_q->get_front(req_q);
+        do{
+            if(!request){
+                break;
+            }
+            get_time_diff(&curr_tm, request->ts, &diff);
+            if(!was_waiting_time_exceeded(&diff,delta,max_queue_time)){
+                break;
+            }
+            // waiting time exceeded
+            req_q->dequeue(req_q);
+            // insert "front" Request in the denied connection queue
+            mutex_lock(excd_tm_mtx,3,1000);
+            excd_tm_q->enqueue(excd_tm_q,request);
+            // TODO: create routines for dealing with errors in pthread_mutex_unlock
+            mutex_unlock(excd_tm_mtx);
+            // signal th_excd_tm_q_mgr
+            sem_post(excd_tm_sem);
+            request = req_q->get_front(req_q);
+        } while(request);
+        pthread_mutex_unlock(req_q_mtx);
+        
+    }
+    return NULL;
+};
+
+void*
+th_excd_tm_q_mgr(void* args){
+    ThExcdTmQMgr*    _args       =  (ThExcdTmQMgr*) args;
+    Queue*           excd_tm_q   = _args->excd_tm_q;
+    pthread_mutex_t* excd_tm_mtx = _args->excd_tm_mtx;
+    sem_t*           excd_tm_sem = _args->excd_tm_sem;
+    free(args);
+    Request* rq;
+    char* msg = "Timeout Error: the connection couldn't be established";
+    while(1){
+        //TODO: create routine to handle the sem_wait sycall
+        sem_wait(excd_tm_sem);
+        mutex_lock(excd_tm_mtx,3,1000);
+        rq = excd_tm_q->dequeue(excd_tm_q);
+        pthread_mutex_unlock(excd_tm_mtx);
+        if(!rq){
+            continue;
+        }
+        send_resp_to_clnt(msg,strlen(msg)+1,rq->fd,3,1000);
+        close(rq->fd);
+        free(rq->ts);
+        free(rq);         
+    }
+    return NULL;
+}
+
+char
+was_waiting_time_exceeded(struct timespec* diff,
+                          float  dlt_sec,
+                          int max_queue_time){
+    if(dlt_sec>max_queue_time){
+        dlt_sec=(float)max_queue_time;
+    }
+    float diff_t = diff->tv_sec + diff->tv_nsec/1e9;
+    if(diff_t>dlt_sec) return 1;
+    return 0;
+}
+
+void
+get_time_diff(struct timespec* a, 
+              struct timespec* b,
+              struct timespec* diff){
+        diff->tv_sec  = a->tv_sec - b->tv_sec;
+        diff->tv_nsec = a->tv_nsec - b->tv_nsec;
+        return;
+    }
+Request*
+init_request(int fd){
+    Request* rq = (Request*)calloc(1,sizeof(Request));
+    struct timespec* ts = (struct timespec*)calloc(1,sizeof(struct timespec));
+    clock_gettime(CLOCK_MONOTONIC, ts);
+    rq->fd = fd;
+    rq->ts = ts;
+    return rq;
+}
+void*
+run_thread(void* _args){
+    ThreadFunc* args = (ThreadFunc*)_args;
+    pthread_t th_id = pthread_self();
+    // Guarantees that thread resources are deallocated upon return
+    pthread_detach(th_id);
+    void* fn_args = args->args;
+    void* (*fnc)(void*);
+    fnc = args->fptr;
+    free(args);
+    fnc(fn_args);
+    return NULL;
+}
+void create_thread(void* args){
+    pthread_t thid;
+    int err = pthread_create(&thid, NULL, run_thread, args);
+    if(err==0){
+        return;
+    }
+    exit(EXIT_FAILURE);
+}
+void*
+app_worker(void* _args){
+    AppWorker* args = (AppWorker*)_args;
+    Request*   rq   = NULL;
+    while(1){
+        printf("Worker thread %d waiting for client request.\n", args->id);
+        sem_wait(args->req_q_sem);
+        mutex_lock(args->req_q_mtx,3,1000);
+        rq = (Request*)(args->req_q->dequeue(args->req_q));
+        mutex_unlock(args->req_q_mtx);
+        if(rq){
+            set_recv_tmout(rq->fd, args->recv_timeout, (suseconds_t)0);
+            args->func((void*)&rq->fd);
+            //app_code(rq->fd);
+            free(rq->ts);
+            free(rq);
+        }
+    }
+    free(args);
+    return NULL;
+}
+
+void
+set_recv_tmout(int fd, time_t sec, suseconds_t usec){
+    if((!sec && !usec) || sec<0 || usec<0){
+        return;
+    }
+    struct timeval tv;
+    tv.tv_sec = sec;
+    tv.tv_usec = usec;
+    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof tv);
+    return;
+}
+
+ThreadFunc*
+init_worker_th(Queue*           req_q,
+               pthread_mutex_t* req_q_mtx,
+               sem_t*           req_q_sem,
+               unsigned int     id,
+               void*            (*fptr)(void*),
+               time_t           recv_timeout){
+
+    ThreadFunc* th_func     = (ThreadFunc*)calloc(1,sizeof(ThreadFunc));
+    AppWorker* th_func_args = (AppWorker*) calloc(1,sizeof(AppWorker));
+    if(!th_func || !th_func_args){
+        exit(EXIT_FAILURE);
+    }
+    th_func_args->req_q        = req_q;
+    th_func_args->req_q_mtx    = req_q_mtx;
+    th_func_args->req_q_sem    = req_q_sem;
+    th_func_args->id           = id;
+    th_func_args->func         = fptr;
+    th_func_args->recv_timeout = recv_timeout;
+    th_func->fptr              = &app_worker;
+    th_func->args              = (void*) th_func_args;
+    return th_func;
+    }
+void
+create_workers_pool(pthread_mutex_t* req_q_mtx,
+                    Queue*           req_q,
+                    sem_t*           req_q_sem,
+                    void*            (*fptr)(void*),
+                    unsigned int      max_app_workers,
+                    time_t           recv_timeout){
+    unsigned int nr_thds_created = 0;
+    while(nr_thds_created<max_app_workers){
+        ThreadFunc* th = init_worker_th(req_q, req_q_mtx, req_q_sem,nr_thds_created,fptr,recv_timeout);
+        create_thread((void*)th);
+        nr_thds_created++;
+    }
+
+}
+
+void 
+start_server(void*  (*fptr)(void*),
+             unsigned int    maxpending,
+             unsigned int    max_queue_time,
+             unsigned int    max_app_workers,
+             time_t          recv_timeout){
+    pthread_mutex_t*    excd_tm_mtx = (pthread_mutex_t*)calloc(1,sizeof(pthread_mutex_t));
+    pthread_mutex_t*    req_q_mtx   = (pthread_mutex_t*)calloc(1,sizeof(pthread_mutex_t));
+    Queue*              excd_tm_q   = init_queue(NULL);
+    Queue*              req_q       = init_queue(NULL);
+    pthread_mutexattr_t attr;
+    sem_t*              excd_tm_sem = (sem_t*)calloc(1,sizeof(sem_t));
+    sem_t*              req_q_sem   = (sem_t*)calloc(1,sizeof(sem_t));
 	int server_fd, client_fd;
-	server_fd = get_server_sock("6379");
+    // initialize mutexes
+    pthread_mutexattr_init(&attr);
+    pthread_mutexattr_setrobust(&attr, PTHREAD_MUTEX_ROBUST);
+    pthread_mutex_init(req_q_mtx, &attr);
+    pthread_mutex_init(excd_tm_mtx, &attr);
+    pthread_mutexattr_destroy(&attr);
+    // initialize semaphores
+    sem_init(excd_tm_sem, 0, 0);
+    sem_init(req_q_sem, 0, 0);
+    // initialize th_req_queue_mgr
+    ThreadFunc* th_rq_q_mng =  init_th_req_queue_mgr(req_q, req_q_mtx,
+                                                     excd_tm_q,
+                                                     excd_tm_mtx,
+                                                     excd_tm_sem,
+                                                     max_queue_time);
+    create_thread((void*)th_rq_q_mng);
+    // initialize th_excd_tm_q_mgr
+    ThreadFunc* th_exd_tm_mgr = init_th_excd_tm_q_mgr(excd_tm_q,excd_tm_mtx,excd_tm_sem);
+    create_thread((void*)th_exd_tm_mgr);
+    create_workers_pool(req_q_mtx, req_q, req_q_sem,fptr,max_app_workers,recv_timeout);
+	server_fd = get_server_sock("6379",maxpending);
 	if (server_fd == -1) {
 		printf("Socket creation failed: %s...\n", strerror(errno));
-		return -1;
+		return;
 	}
     while(1){
-	    printf("Waiting for a client to connect...\n");
+	    printf("Main thread: waiting for a client to connect...\n");
         client_fd = accept_client(server_fd);
         if(client_fd==-1) continue;
-        create_thread_safe(client_fd);
+        //create_thread_safe(client_fd);
+        Request* rq = init_request(client_fd);
+        pthread_mutex_lock(req_q_mtx);
+        req_q->enqueue(req_q,rq);
+        pthread_mutex_unlock(req_q_mtx);
+        sem_post(req_q_sem);
     }
 	close(server_fd);
-	return 0;
+    // TODO: the clean up routines are bellow. Probably,
+    // there's a better approach out there (for instance, registering the clean up routine
+    // when using exit(). Read more about it.).
+    // Calling pthread_mutex_destroy this way is prone to errors. Again, probably there is 
+    // a better approach.
+    pthread_mutex_destroy(req_q_mtx);
+    pthread_mutex_destroy(excd_tm_mtx);
+    sem_destroy(excd_tm_sem);
+    sem_destroy(req_q_sem);
+    free(th_rq_q_mng->args);
+    free(th_rq_q_mng);
+    free(th_exd_tm_mgr->args);
+    free(th_exd_tm_mgr);
+    free(req_q);
+    free(excd_tm_q);
+	return;
 }
