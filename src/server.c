@@ -23,7 +23,6 @@
 int   get_server_sock(char* service);
 int   accept_client(int server_fd);
 void* app_code(int fd);
-ClientArgs* init_client(void);
 ssize_t send_resp_to_clnt(void* buf,
                           size_t size,
                           int client_fd,
@@ -65,10 +64,14 @@ void     create_thread(void* args);
 void*    app_worker(void* _args);
 ThreadFunc* init_worker_th(Queue*           req_q,
                            pthread_mutex_t* req_q_mtx,
-                           sem_t*           req_q_sem);
+                           sem_t*           req_q_sem,
+                           unsigned int     id);
 void create_workers_pool(pthread_mutex_t* req_q_mtx,
                          Queue*           req_q,
                          sem_t*           req_q_sem);
+void set_recv_tmout(int fd, time_t sec, suseconds_t usec);
+
+
 int
 get_server_sock(char* service) {
     struct addrinfo addr_config;
@@ -129,7 +132,7 @@ app_code(int fd){
             case '*':
                 ArrayNode* array = parse_array(fd);
                 if(array){
-                    print_array(array,0);
+                    //print_array(array,0);
                     rtn_s = parse_command(array);
                 }
                 if(array && rtn_s){
@@ -147,22 +150,12 @@ app_code(int fd){
         }
 
 	}
+    printf("Closing fd: %d\n",fd);
     close(fd);
     return NULL;
 }
 
-// I didn't figure it out yet how to make the server completely app agnostic
-// Probably some routine created by the user
-ClientArgs*
-init_client(void){
-    ClientArgs* args = (ClientArgs*) calloc(1,sizeof(ClientArgs));
-    if(!args){
-        return NULL;
-    }
-    args->fd   = -1;
-    args->fptr = &app_code;
-    return args;
-}
+
 /**
 * Sends data to a client socket with retry capability.
 *
@@ -217,9 +210,9 @@ send_resp_to_clnt(void* buf,
     
 }
 ssize_t
-recv_resp_fm_clnt(void* buf,
-                  size_t size,
-                  int fd,
+recv_resp_fm_clnt(void*        buf,
+                  size_t       size,
+                  int          fd,
                   unsigned int n_retries,
                   unsigned int retry_tm){
     ssize_t rtn;
@@ -495,20 +488,39 @@ app_worker(void* _args){
     AppWorker* args = (AppWorker*)_args;
     Request*   rq = NULL;
     while(1){
+        printf("Worker thread %d waiting for client request.\n", args->id);
         sem_wait(args->req_q_sem);
         mutex_lock(args->req_q_mtx,3,1000);
-        rq = (Request*)args->req_q->dequeue(args->req_q);
+        rq = (Request*)(args->req_q->dequeue(args->req_q));
         mutex_unlock(args->req_q_mtx);
         if(rq){
+            set_recv_tmout(rq->fd, (time_t)RECV_TIMEOUT, (suseconds_t)0);
             app_code(rq->fd);
+            free(rq->ts);
+            free(rq);
         }
     }
+    free(args);
     return NULL;
 }
+
+void
+set_recv_tmout(int fd, time_t sec, suseconds_t usec){
+    if((!sec && !usec) || sec<0 || usec<0){
+        return;
+    }
+    struct timeval tv;
+    tv.tv_sec = sec;
+    tv.tv_usec = usec;
+    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof tv);
+    return;
+}
+
 ThreadFunc*
 init_worker_th(Queue*           req_q,
                pthread_mutex_t* req_q_mtx,
-               sem_t*           req_q_sem){
+               sem_t*           req_q_sem,
+               unsigned int     id){
 
     ThreadFunc* th_func     = (ThreadFunc*)calloc(1,sizeof(ThreadFunc));
     AppWorker* th_func_args = (AppWorker*) calloc(1,sizeof(AppWorker));
@@ -518,6 +530,7 @@ init_worker_th(Queue*           req_q,
     th_func_args->req_q       = req_q;
     th_func_args->req_q_mtx   = req_q_mtx;
     th_func_args->req_q_sem   = req_q_sem;
+    th_func_args->id          = id;
     th_func->fptr             = &app_worker;
     th_func->args             = (void*) th_func_args;
     return th_func;
@@ -528,7 +541,7 @@ create_workers_pool(pthread_mutex_t* req_q_mtx,
                     sem_t*           req_q_sem){
     unsigned int nr_thds_created = 0;
     while(nr_thds_created<MAX_APP_WORKERS){
-        ThreadFunc* th = init_worker_th(req_q, req_q_mtx, req_q_sem);
+        ThreadFunc* th = init_worker_th(req_q, req_q_mtx, req_q_sem,nr_thds_created);
         create_thread((void*)th);
         nr_thds_created++;
     }
@@ -566,7 +579,7 @@ main() {
 		return -1;
 	}
     while(1){
-	    printf("Waiting for a client to connect...\n");
+	    printf("Main thread: waiting for a client to connect...\n");
         client_fd = accept_client(server_fd);
         if(client_fd==-1) continue;
         //create_thread_safe(client_fd);

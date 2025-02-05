@@ -4,8 +4,11 @@
 #define MAX_THREAD_N  2
 #define MAX_QUEUE_TIME 5
 #define MAX_APP_WORKERS 5
+#define RECV_TIMEOUT    10
 #include "queue.h"
 #include <semaphore.h>
+
+
 typedef struct Request Request;
 typedef struct ClientArgs ClientArgs; 
 typedef struct ThReqQueueMngrArgs ThReqQueueMngrArgs;
@@ -34,6 +37,7 @@ struct ThExcdTmQMgr{
     sem_t*           excd_tm_sem;
 };
 struct AppWorker{
+    unsigned int     id;
     Queue*           req_q;
     pthread_mutex_t* req_q_mtx;
     sem_t*           req_q_sem;
