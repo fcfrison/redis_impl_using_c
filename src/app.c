@@ -32,6 +32,11 @@ app_code(void* arg){
         switch (buff){
             case '*':
                 ArrayNode* array = parse_array(fd);
+                if(!array){
+                    char* msg = "An error occured while parsing the command.";
+                    send_resp_to_clnt(msg,strlen(msg)+1, fd,3,500);
+                    return NULL;
+                }
                 if(array){
                     //print_array(array,0);
                     rtn_s = parse_command(array);
@@ -51,10 +56,8 @@ app_code(void* arg){
         }
 
 	}
-    printf("Closing fd: %d\n",fd);
-    close(fd);
     return NULL;
 }
 int main(){
-    start_server(&app_code, 10, 5, 2,10);
+    start_server(&app_code, 10, 5, 2, 10);
 }

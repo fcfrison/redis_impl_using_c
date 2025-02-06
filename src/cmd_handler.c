@@ -6,8 +6,15 @@
 #define MAX_BYTES_BULK_STR 9
 char* handle_echo_cmd(void* fst_nod);
 char* __handle_echo_cmd(void* node, int* size);
+char* handle_set_cmd(void* node);
+void validate_set_cmd(void* node, char* state, GenericNode*** parsed_cmd);
+void handle_set_option(char* state,
+                       GenericNode** parsed_cmd,
+                       GenericNode** gnode,
+                       char bit_pos);
 
-
+unsigned char is_set_option_valid(char* state, char bit_pos);
+void* set_cmd_stage_a(GenericNode** gnode, char* state, GenericNode** parsed_cmd);
 char*
 parse_command(void* node){
     GenericNode* gnode = (GenericNode*) node;
@@ -21,7 +28,7 @@ parse_command(void* node){
                 if(!strcmp(temp->content,"ECHO")){
                     return handle_echo_cmd(temp->node->next);
                 }else if(!strcmp(temp->content,"SET")){
-
+                    return handle_set_cmd(temp->node->next);
                 }
                 return NULL;
             default:
@@ -86,49 +93,50 @@ char*
 handle_set_cmd(void* node){
     // The void* node is already the arguments of the set cmd
     char state;
-    GenericNode** parsed_cmd;
-    validate_set_cmd(node, state, parsed_cmd);
+    GenericNode** parsed_cmd = NULL;
+    validate_set_cmd(node, &state, &parsed_cmd);
     if(state==-1){
         return NULL;
     }
+    return NULL;
     // Next step is decide what to do, based on the current state
     // remember that parsed_cmd must be freed;
 }
 
 void
-validate_set_cmd(void* node, char* state, GenericNode** parsed_cmd){
+validate_set_cmd(void* node, char* state, GenericNode*** parsed_cmd){
     if(!node){
         *state = -1;
         return;
     }
     *state = 0;
     *state = 1<<6;
-    GenericNode* gnode = (GenericNode*)gnode;
-    parsed_cmd = calloc(6,sizeof(GenericNode*)); 
+    GenericNode* gnode = (GenericNode*)node;
+    *parsed_cmd = calloc(6,sizeof(GenericNode*)); 
     BulkStringNode* blk_s_nd = NULL;
     char* option = NULL;
-    set_cmd_stage_a(gnode, state, parsed_cmd);
+    set_cmd_stage_a(&gnode, state, *parsed_cmd);
     while(gnode && *state>0){
         if(gnode->node->type!=BULK_STR){
-            state = -1;
+            *state = -1;
             continue;
         }
         blk_s_nd = (BulkStringNode*) gnode;
         option   = blk_s_nd->content;
-        if(strcmp(option,"NX") || strcmp(option,"XX")){
-            handle_set_option(state, parsed_cmd, gnode,3);  
-        }else if(strcmp(option,"GET")){
-            handle_set_option(state, parsed_cmd, gnode,2);
-        }else if(strcmp(option,"EX")   || strcmp(option,"PX") ||
-                 strcmp(option,"EXAT") || strcmp(option,"PXAT")){
-            handle_set_option(state, parsed_cmd, gnode,1);
+        if(!strcmp(option,"NX") || !strcmp(option,"XX")){
+            handle_set_option(state, *parsed_cmd, &gnode,3);  
+        }else if(!strcmp(option,"GET")){
+            handle_set_option(state, *parsed_cmd, &gnode,2);
+        }else if(!strcmp(option,"EX")   || !strcmp(option,"PX") ||
+                 !strcmp(option,"EXAT") || !strcmp(option,"PXAT")){
+            handle_set_option(state, *parsed_cmd, &gnode,1);
             if(!gnode || gnode->node->type!=BULK_STR || gnode->node->next){
                 *state = -1;
             }
-            handle_set_option(state, parsed_cmd, gnode,0);
+            handle_set_option(state, *parsed_cmd, &gnode,0);
         }
         else{
-            state = -1;
+            *state = -1;
             break;
         }   
     }
@@ -137,25 +145,25 @@ validate_set_cmd(void* node, char* state, GenericNode** parsed_cmd){
 void
 handle_set_option(char* state,
                   GenericNode** parsed_cmd,
-                  GenericNode* gnode,
-                  unsigned char bit_pos){
+                  GenericNode** gnode,
+                  char bit_pos){
     if(!is_set_option_valid(state,bit_pos)){
         *state = -1;
         return;
         }
-        parsed_cmd[bit_pos] = gnode;
+        parsed_cmd[(int)bit_pos] = *gnode;
         *state = *state | 1<<bit_pos;
-        gnode = gnode->node->next;
+        *gnode = (*gnode)->node->next;
         return;
 }
 unsigned char
-is_set_option_valid(char* state, unsigned char bit_pos){
-    if((bit_pos<0) || (bit_pos>8)){
+is_set_option_valid(char* state, char bit_pos){
+    if((bit_pos<-1)||(bit_pos>8)){
         return 0;
     }
     unsigned char is_not_zero = 0;
     while(bit_pos>-1){
-        is_not_zero = state[bit_pos] & 1<<bit_pos;
+        is_not_zero = state[(int)bit_pos] & 1<<bit_pos;
         if(is_not_zero){
             return 0;
         }
@@ -164,7 +172,7 @@ is_set_option_valid(char* state, unsigned char bit_pos){
     return 1;
 }
 void*
-set_cmd_stage_a(GenericNode* gnode, char* state, GenericNode** parsed_cmd){
+set_cmd_stage_a(GenericNode** gnode, char* state, GenericNode** parsed_cmd){
     if(!gnode){
         return NULL;
     }
@@ -172,24 +180,24 @@ set_cmd_stage_a(GenericNode* gnode, char* state, GenericNode** parsed_cmd){
     do{
         switch (*state){
         case 64:
-            if(((gnode->node->type)!=BULK_STR) || (!gnode->node->next)){
+            if((((*gnode)->node->type)!=BULK_STR) || (!(*gnode)->node->next)){
                 *state = -1;
                 continue;
             }
             *state = *state | (1<<5) ;
-            parsed_cmd[5] = gnode;
-            gnode = gnode->node->next;
+            parsed_cmd[5] = *gnode;
+            *gnode = (*gnode)->node->next;
             break;
         case 96:
-           if((gnode->node->type)!=BULK_STR){
+           if(((*gnode)->node->type)!=BULK_STR){
             *state=-1;
             continue;
            }
            *state = *state | (1<<4);
-           parsed_cmd[4] = gnode;
-           gnode = gnode->node->next;
+           parsed_cmd[4] = *gnode;
+           *gnode = (*gnode)->node->next;
            break;
         }
-    } while(0<state<112);
+    } while((0<*state) &&(*state<112));
     return NULL;
 }

@@ -1,5 +1,11 @@
 {
     "files.associations": {
-        "util.h": "c"
+        "util.h": "c",
+        "type_traits": "c",
+        "errno.h": "c",
+        "errors.h": "c",
+        "server.h": "c",
+        "cmd_handler.h": "c",
+        "queue.h": "c"
     }
 }

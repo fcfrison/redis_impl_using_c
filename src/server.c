@@ -215,6 +215,9 @@ read_exact_bytes(int fd, char* buf, size_t len){
         log_error("connection closed by the client");
         return 0;
     }
+    if(rtn==-1){
+        return rtn;
+    }
     if((size_t)rtn < len){
         log_error("less bytes than the expected were received");
         return 0;
@@ -462,6 +465,7 @@ app_worker(void* _args){
             set_recv_tmout(rq->fd, args->recv_timeout, (suseconds_t)0);
             args->func((void*)&rq->fd);
             //app_code(rq->fd);
+            close(rq->fd);
             free(rq->ts);
             free(rq);
         }
