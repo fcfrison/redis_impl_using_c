@@ -56,5 +56,5 @@ app_code(void* arg){
     return NULL;
 }
 int main(){
-    start_server(&app_code, 10, 5, 100,10);
+    start_server(&app_code, 10, 5, 2,10);
 }
