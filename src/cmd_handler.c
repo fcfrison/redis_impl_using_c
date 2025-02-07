@@ -8,7 +8,7 @@ char* handle_echo_cmd(void* fst_nod);
 char* __handle_echo_cmd(void* node, int* size);
 char* handle_set_cmd(void* node);
 void validate_set_cmd(void* node, char* state, GenericNode*** parsed_cmd);
-void handle_set_option(char* state,
+void handle_set_options(char* state,
                        GenericNode** parsed_cmd,
                        GenericNode** gnode,
                        char bit_pos);
@@ -103,6 +103,17 @@ handle_set_cmd(void* node){
     // remember that parsed_cmd must be freed;
 }
 
+/**
+ * Main entry point for SET command validation and parsing.
+ * Orchestrates the entire parsing process in three stages:
+ * 1. Validates and parses mandatory key-value pair (via set_cmd_stage_a)
+ * 2. Processes optional arguments sequentially
+ * 3. Handles option-specific validations (e.g., expiry time for EX/PX)
+ * 
+ * @param node Pointer to the command node to be parsed
+ * @param state Pointer to parsing state (tracks progress and errors)
+ * @param parsed_cmd Triple pointer to store parsed command components (array of 6 elements)
+ */
 void
 validate_set_cmd(void* node, char* state, GenericNode*** parsed_cmd){
     if(!node){
@@ -124,16 +135,16 @@ validate_set_cmd(void* node, char* state, GenericNode*** parsed_cmd){
         blk_s_nd = (BulkStringNode*) gnode;
         option   = blk_s_nd->content;
         if(!strcmp(option,"NX") || !strcmp(option,"XX")){
-            handle_set_option(state, *parsed_cmd, &gnode,3);  
+            handle_set_options(state, *parsed_cmd, &gnode,3);  
         }else if(!strcmp(option,"GET")){
-            handle_set_option(state, *parsed_cmd, &gnode,2);
+            handle_set_options(state, *parsed_cmd, &gnode,2);
         }else if(!strcmp(option,"EX")   || !strcmp(option,"PX") ||
                  !strcmp(option,"EXAT") || !strcmp(option,"PXAT")){
-            handle_set_option(state, *parsed_cmd, &gnode,1);
+            handle_set_options(state, *parsed_cmd, &gnode,1);
             if(!gnode || gnode->node->type!=BULK_STR || gnode->node->next){
                 *state = -1;
             }
-            handle_set_option(state, *parsed_cmd, &gnode,0);
+            handle_set_options(state, *parsed_cmd, &gnode,0);
         }
         else{
             *state = -1;
@@ -142,8 +153,22 @@ validate_set_cmd(void* node, char* state, GenericNode*** parsed_cmd){
     }
     return;
 }
+
+/**
+ * Processes individual SET command options and updates parsing state.
+ * Responsible for:
+ * - Validating option placement in command sequence
+ * - Storing option node in appropriate parsed_cmd position
+ * - Updating state bitmap to reflect processed option
+ * - Advancing to next node in command sequence
+ * 
+ * @param state Pointer to current parsing state
+ * @param parsed_cmd Array of parsed command components
+ * @param gnode Pointer to current node being processed
+ * @param bit_pos Position in state bitmap for current option (0-3)
+ */
 void
-handle_set_option(char* state,
+handle_set_options(char* state,
                   GenericNode** parsed_cmd,
                   GenericNode** gnode,
                   char bit_pos){
@@ -156,6 +181,20 @@ handle_set_option(char* state,
         *gnode = (*gnode)->node->next;
         return;
 }
+/**
+ * Validates option placement using bitmap state tracking.
+ * Ensures:
+ * - No duplicate options are present
+ * - Options appear in valid sequence
+ * - All prerequisite options are processed
+ * 
+ * Uses a walking bit check to validate all lower-order bits
+ * are unset before allowing current bit position.
+ * 
+ * @param state Current parsing state bitmap
+ * @param bit_pos Position in state bitmap to validate (0-8)
+ * @return 1 if option placement is valid, 0 if invalid
+ */
 unsigned char
 is_set_option_valid(char* state, char bit_pos){
     if((bit_pos<-1)||(bit_pos>8)){
@@ -171,6 +210,24 @@ is_set_option_valid(char* state, char bit_pos){
     }
     return 1;
 }
+
+/**
+ * Handles initial parsing stage for SET command's mandatory components.
+ * Specifically:
+ * 1. Validates and stores key (sets bit 6)
+ * 2. Validates and stores value (sets bit 5)
+ * 3. Ensures both components are bulk strings
+ * 4. Verifies proper node linking
+ * 
+ * Uses state values:
+ * - 64: Key validation stage
+ * - 96: Value validation stage
+ * 
+ * @param gnode Pointer to command node
+ * @param state Pointer to parsing state
+ * @param parsed_cmd Array to store parsed components
+ * @return Always returns NULL (state tracking handled via state parameter)
+ */
 void*
 set_cmd_stage_a(GenericNode** gnode, char* state, GenericNode** parsed_cmd){
     if(!gnode){
