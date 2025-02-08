@@ -30,7 +30,6 @@ remove(SimpleMap* sm, void* key, void*(cmp_fptr)(void* a, void* b)){
     }
 }
 
-
 unsigned char is_full(SimpleMap* sm){
     if(sm->top+1==sm->capacity){
         return 1;
@@ -70,8 +69,10 @@ set(SimpleMap* sm, KeyBaseStruct* key, ValueBaseStruct* value){
 
 void* 
 compare(const void* a, const void* b){
-    const KeyBaseStruct* el_a = (const KeyBaseStruct*)a;
-    const KeyBaseStruct* el_b = (const KeyBaseStruct*)b;
+    const KeyBaseStruct* _a   = (const KeyBaseStruct*)a;
+    const KeyBaseStruct* _b   = (const KeyBaseStruct*)b;
+    const KeyNode*       el_a = (const KeyNode*)_a->key;
+    const KeyNode*       el_b = (const KeyNode*)_b->key;
     if(el_a->size!=el_b->size){
             return NULL;
         }
