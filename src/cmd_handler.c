@@ -102,7 +102,25 @@ handle_set_cmd(void* node){
     // Next step is decide what to do, based on the current state
     // remember that parsed_cmd must be freed;
 }
-
+void
+execute_set_cmd(char state, GenericNode** parsed_cmd,char** rtn_val){
+    switch (state){
+        case 112: //0111 0000
+            /* code */
+            break;
+        case 120: //0111 1000
+            break;
+        case 0: // 0111 0100
+            break;
+        case 1: // 0111 0011
+            break;
+        case 2: // 0111 1011
+        case 3: // 0111 1100
+        case 4: // 0111 0111
+        default:
+            break;
+    }
+}
 /**
  * Main entry point for SET command validation and parsing.
  * Orchestrates the entire parsing process in three stages:
