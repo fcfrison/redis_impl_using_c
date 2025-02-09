@@ -1,19 +1,30 @@
 #include <stdlib.h>
 #include "../include/simple_map.h"
-void* remove_key(SimpleMap* sm,
-                 void* key,
-                 void*(cmp_fptr)(const void* a, const void* b),
-                 KeyValuePair* rmv_pair);
 
+KeyValuePair*
+create_key_val_pair(void* key, void* value){
+    if(!key) return NULL;
+    KeyValuePair* kvp = (KeyValuePair*)calloc(1,sizeof(KeyValuePair));
+    kvp->key   = key;
+    kvp->value = value;
+    return kvp;
+}
 
-void*
+KeyValuePair*
 remove_key(SimpleMap* sm,
            void* key,
            void*(cmp_fptr)(const void* a, const void* b),
            KeyValuePair* rmv_pair){
+    if(!sm       || !key || !cmp_fptr || !rmv_pair ||
+       !sm->keys || !sm->values){
+        return NULL;
+    }
     int i = 0;
     void* rmv_key = NULL, *rmv_value = NULL; 
     while(i<=sm->top){
+        if(!sm->keys[i]){
+            return NULL;
+        }
         rmv_key = sm->keys[i]->key;
         if(!cmp_fptr(key,rmv_key)){
             i++;
@@ -27,7 +38,7 @@ remove_key(SimpleMap* sm,
                 sm->top--;
                 rmv_pair->key   = rmv_key;
                 rmv_pair->value = rmv_value;
-                return rmv_key;
+                return rmv_pair;
             }
             sm->keys[i] = sm->keys[i+1];
             sm->values[i] = sm->values[i+1];
@@ -36,8 +47,6 @@ remove_key(SimpleMap* sm,
     }
     return NULL;
 }
-/**
- * 
 void* 
 compare(const void* a, const void* b){
     const KeyNode* el_a     = (const KeyNode*)a;
@@ -53,22 +62,20 @@ compare(const void* a, const void* b){
     }
     return NULL;
 }
- * 
- */
 
-unsigned char is_full(SimpleMap* sm){
+unsigned char __is_full(SimpleMap* sm){
     if(sm->top+1==sm->capacity){
         return 1;
     }
     return 0;
 }
 SimpleMap*
-double_arrays(SimpleMap* sm){
+__double_arrays(SimpleMap* sm){
     if(!sm || !sm->keys || !sm->values){
         return NULL;
     }
-    if(!sm->capacity){
-        return sm;
+    if(!sm->capacity || !__is_full(sm)){
+        return NULL;
     }
     KeyWrapper**   keys   = NULL;
     ValueWrapper** values = NULL;
@@ -88,44 +95,101 @@ double_arrays(SimpleMap* sm){
     return sm;
 }
 
-void*
-set(SimpleMap* sm, KeyValuePair* key_par){
+KeyValuePair*
+__set(SimpleMap* sm, KeyValuePair* key_par){
     if(!sm           || !key_par    || 
        !sm->keys     || !sm->values || 
-       !key_par->key){
+       !key_par->key || !sm->capacity){
         return NULL;
     }
     KeyWrapper*   key   = (KeyWrapper*)calloc(1,sizeof(KeyWrapper));
     ValueWrapper* value = (ValueWrapper*)calloc(1,sizeof(ValueWrapper));
     key->key            = key_par->key;
     value->value        = key_par->value;
-    if(is_full(sm)){
-        if(!double_arrays(sm)){
+    if(__is_full(sm)){
+        if(!__double_arrays(sm)){
+            free(key);
+            free(value);
             return NULL;
         }
     }
     sm->top++;
     sm->keys[sm->top]   = key;
     sm->values[sm->top] = value;
-    return sm;
+    return key_par;
+}
+KeyValuePair*
+__upgrade(SimpleMap* sm, int pos, KeyValuePair* key_par){
+    if(!sm       || !key_par || !sm->values   ||
+       !sm->keys || pos<0    || pos > sm->top ||
+       !key_par->key){
+        return NULL;
+    }
+    void* old_v = sm->values[pos]->value;
+    void* old_k = sm->keys[pos]->key;
+    sm->values[pos]->value = key_par->value;
+    sm->keys[pos]->key     = key_par->key;
+    key_par->key           = old_k;
+    key_par->value         = old_v;
+    return old_v;
 }
 
 
-const void*
-find(const SimpleMap* sm, const void* key, void*(cmp_fptr)(const void* a, const void* b)){
+KeyValuePair*
+set(SimpleMap* sm, KeyValuePair* key_par, void*(cmp_fptr)(const void* a, const void* b)){
+    if(!sm || !key_par || !key_par->key){
+        return NULL;
+    }
+    int pos = __find(sm, key_par->key,cmp_fptr);
+    switch (pos){
+        case FIND_KEY_ERROR:
+        case KEY_ARR_ERROR:
+            return NULL;
+        case KEY_NOT_FOUND:
+            return __set(sm, key_par);
+        default:
+            return __upgrade(sm, pos, key_par);
+            break;
+    }
+
+}
+KeyValuePair*
+get(SimpleMap* sm, void* key, void*(cmp_fptr)(const void* a, const void* b)){
+    if(!sm || !key || !cmp_fptr ){
+        return NULL;
+    }
+    int pos = __find(sm, key, cmp_fptr);
+    switch (pos){
+        case KEY_NOT_FOUND:
+        case FIND_KEY_ERROR:
+        case KEY_ARR_ERROR:
+            return NULL;
+        default:
+            KeyValuePair* kv = (KeyValuePair*)calloc(1,sizeof(KeyValuePair));
+            if(!kv) return NULL;
+            kv->key   = sm->keys[pos]->key;
+            kv->value = sm->values[pos]->value; 
+            return kv;
+    }
+}
+int
+__find(const SimpleMap* sm, const void* key, void*(cmp_fptr)(const void* a, const void* b)){
     int i = 0;
     if(!sm || !key || !cmp_fptr ||
        !sm->keys){
-        return NULL;
+        return FIND_KEY_ERROR;
        }
     while(i <= sm->top){
+        if(!sm->keys[i]){
+            return KEY_ARR_ERROR;
+        }
         const void* srch_el = cmp_fptr(sm->keys[i]->key,key);
         if(srch_el){
-            return srch_el;
+            return i;
         }
         i++;    
     }
-    return NULL;
+    return KEY_NOT_FOUND;
 }
 SimpleMap*
 create_simple_map(void){
@@ -144,7 +208,7 @@ create_simple_map(void){
         free(k_arr);
         return NULL;
     }
-    sm->capacity = 1;
+    sm->capacity =  1;
     sm->top      = -1;
     sm->keys     = k_arr;
     sm->values   = v_arr;

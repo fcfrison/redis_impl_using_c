@@ -43,16 +43,23 @@ struct ValueNodeString{
     int        size;
 };
 
+enum FindKeyStates{
+    FIND_KEY_ERROR = -1,
+    KEY_ARR_ERROR  = -2,
+    KEY_NOT_FOUND  = -3
 
+};
 
-unsigned char is_full(SimpleMap* sm);
-SimpleMap* double_arrays(SimpleMap* sm);
-void* set(SimpleMap* sm, KeyValuePair* key_par);
-const void* find(const SimpleMap* sm, const void* key, void*(cmp_fptr)(const void* a, const void* b));
-SimpleMap* create_simple_map(void);
-void* remove_key(SimpleMap* sm,
-                 void* key,
-                 void*(cmp_fptr)(const void* a, const void* b),
-                 KeyValuePair* rmv_pair);
-
+KeyValuePair* create_key_val_pair(void* key, void* value);
+KeyValuePair* remove_key(SimpleMap* sm, void* key, void*(cmp_fptr)(const void* a, const void* b), KeyValuePair* rmv_pair);
+void*  compare(const void* a, const void* b);
+unsigned char __is_full(SimpleMap* sm);
+SimpleMap*    __double_arrays(SimpleMap* sm);
+KeyValuePair* __set(SimpleMap* sm, KeyValuePair* key_par);
+KeyValuePair* __upgrade(SimpleMap* sm, int pos, KeyValuePair* key_par);
+KeyValuePair* set(SimpleMap* sm, KeyValuePair* key_par, void*(cmp_fptr)(const void* a, const void* b));
+KeyValuePair* get(SimpleMap* sm, void* key, void*(cmp_fptr)(const void* a, const void* b));
+int           __find(const SimpleMap* sm, const void* key, void*(cmp_fptr)(const void* a, const void* b));
+SimpleMap*    create_simple_map(void);
+int delete_map(SimpleMap* sm, void* (*clean_up)(void*, void*));
 #endif
