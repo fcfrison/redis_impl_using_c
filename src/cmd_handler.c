@@ -1,12 +1,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
+#include <sys/time.h>
 #include "../include/protocol.h"
+#include "../include/simple_map.h"
 #define MAX_BYTES_ARR_SIZE 20 
 #define MAX_BYTES_BULK_STR 9
 char* handle_echo_cmd(void* fst_nod);
 char* __handle_echo_cmd(void* node, int* size);
-char* handle_set_cmd(void* node);
+char* handle_set_cmd(void* node, SimpleMap* sm);
 void validate_set_cmd(void* node, char* state, GenericNode*** parsed_cmd);
 void handle_set_options(char* state,
                        GenericNode** parsed_cmd,
@@ -16,7 +19,7 @@ void handle_set_options(char* state,
 unsigned char is_set_option_valid(char* state, char bit_pos);
 void* set_cmd_stage_a(GenericNode** gnode, char* state, GenericNode** parsed_cmd);
 char*
-parse_command(void* node){
+parse_command(void* node, SimpleMap* sm){
     GenericNode* gnode = (GenericNode*) node;
     while(gnode){
         switch (gnode->node->type){
@@ -28,7 +31,7 @@ parse_command(void* node){
                 if(!strcmp(temp->content,"ECHO")){
                     return handle_echo_cmd(temp->node->next);
                 }else if(!strcmp(temp->content,"SET")){
-                    return handle_set_cmd(temp->node->next);
+                    return handle_set_cmd(temp->node->next,sm);
                 }
                 return NULL;
             default:
@@ -90,33 +93,148 @@ __handle_echo_cmd(void* node, int* size){
 }
 
 char*
-handle_set_cmd(void* node){
+handle_set_cmd(void* node, SimpleMap* sm){
     // The void* node is already the arguments of the set cmd
     char state;
     GenericNode** parsed_cmd = NULL;
+    char* rtn_val;
     validate_set_cmd(node, &state, &parsed_cmd);
     if(state==-1){
+        if(parsed_cmd){
+            free(parsed_cmd);
+        }
         return NULL;
     }
+
     return NULL;
     // Next step is decide what to do, based on the current state
     // remember that parsed_cmd must be freed;
 }
-void
-execute_set_cmd(char state, GenericNode** parsed_cmd,char** rtn_val){
+
+enum SET_STATES{
+    JUST_SET                 = 112, // 0111 0000
+    SET_EX_PX_EXAL_PXAT = 115, // 0111 0011
+    SET_GET                  = 116, // 0111 0100
+    SET_GET_EXPX             = 119, // 0111 0111
+    SET_NXXX                 = 120, // 0111 1000
+    SET_NXXX_EXPX            = 123, // 0111 1011 
+    SET_NXXX_GET             = 124  // 0111 1100
+};
+struct KeyNode{
+    char*            content;
+    struct timespec* input_time;
+    unsigned int     ex;
+    unsigned int     px;
+    int              size;
+};
+struct ValueNode{
+    void*       content;
+    RedisDtype* dtype;
+};
+struct ValueNodeString{
+    void*      content;
+    RedisDtype dtype;
+    int        size;
+};
+KeyNode*
+create_key_node(char* content,
+                unsigned int ex,
+                unsigned int px,
+                int size){
+    if(!content || size<1){
+        return NULL;
+    }
+    KeyNode* kn = (KeyNode*)calloc(1,sizeof(KeyNode));
+    if(!kn){
+        return NULL;
+    }
+    struct timespec* ts = (struct timespec*)calloc(1,sizeof(struct timespec));
+    clock_gettime(CLOCK_MONOTONIC, ts);
+    // Not sure what the size must be: size or "size+1"
+    kn->content = (char*)calloc(size+1,sizeof(char));
+    memcpy(kn->content,content,size);
+    kn->content[size] = '\0';
+    kn->ex;
+    kn->px;
+    kn->size;
+    kn->input_time = ts;
+    return kn;
+}
+ValueNode*
+create_value_node_string(char* content, RedisDtype dtype, int size){
+    if(!content || size<1){
+        return NULL;
+    }
+    ValueNodeString* vns = (ValueNodeString*)calloc(1,sizeof(ValueNodeString));
+    if(!vns){
+        return NULL;
+    }
+    // Not sure what the size must be: size or "size+1"
+    vns->content = (char*)calloc(size+1,sizeof(char));
+    memcpy(vns->content,content,size);
+    ((char*)vns->content)[size] = '\0';
+    vns->dtype = dtype;
+    vns->size  = size;
+    return vns;
+};
+ValueNode*
+create_value_node(GenericNode* gnode){
+    switch (gnode->node->type){
+        case BULK_STR:
+            BulkStringNode* node = (BulkStringNode*)gnode;
+            return create_value_node_string(node->content, node->node->type, node->size);
+        default:
+            return NULL;
+    }
+}
+
+void* compare(const void* a, const void* b){
+    KeyNode* ka = (KeyNode*) a;
+    KeyNode* kb = (KeyNode*) b;
+    if(ka->size!=kb->size){
+        return NULL;
+    }
+    for(size_t i = 0; i < ka->size; i++){
+        if(ka->content[i]!=kb->content[i]){
+            return NULL;
+        }
+    }
+    return ka;
+};
+
+char*
+execute_set_cmd(char state, GenericNode** parsed_cmd,  SimpleMap* sm){
+    char* rtn_val;
+    if(!parsed_cmd || !sm){
+        return NULL;
+    }
+    BulkStringNode* k = parsed_cmd[5];
+    GenericNode*    v = parsed_cmd[4];
+    // The node for both key/value should've been created
+    if(!k || !v){
+        return NULL;
+    }
+    KeyNode* key = create_key_node(k->content,0,0,k->size);
+    if(!key){
+        return NULL;
+    }
+    ValueNode* value = create_value_node(v);
+    if(!value){
+        free(key);
+        return NULL;
+    }
     switch (state){
-        case 112: //0111 0000
-            /* code */
-            break;
-        case 120: //0111 1000
-            break;
-        case 0: // 0111 0100
-            break;
-        case 1: // 0111 0011
-            break;
-        case 2: // 0111 1011
-        case 3: // 0111 1100
-        case 4: // 0111 0111
+        case JUST_SET:
+        case SET_EX_PX_EXAL_PXAT:
+        case SET_GET_EXPX:
+        case SET_NXXX:
+        case SET_NXXX_EXPX:
+            KeyValuePair* kvp     = create_key_val_pair(key,value);
+            KeyValuePair* rtn_kvp = set(sm,kvp,&compare);
+            //TODO: continue from here
+            // what does it means a null value for rtn_kvp 
+        case SET_GET:
+        case SET_NXXX_GET:
         default:
             break;
     }

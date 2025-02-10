@@ -22,27 +22,6 @@ struct KeyValuePair{
     void* key;
     void* value;
 };
-
-/**
- * KeyNode are application code. For a while, they are going to remain here.
- */
-struct KeyNode{
-    char*            content;
-    struct timespec* input_time;
-    unsigned int     ex;
-    unsigned int     px;
-    int              size;
-};
-struct ValueNode{
-    void*       content;
-    void*       dtype;
-};
-struct ValueNodeString{
-    void*      content;
-    int        dtype;
-    int        size;
-};
-
 enum FindKeyStates{
     FIND_KEY_ERROR = -1,
     KEY_ARR_ERROR  = -2,
@@ -52,7 +31,7 @@ enum FindKeyStates{
 
 KeyValuePair* create_key_val_pair(void* key, void* value);
 KeyValuePair* remove_key(SimpleMap* sm, void* key, void*(cmp_fptr)(const void* a, const void* b), KeyValuePair* rmv_pair);
-void*  compare(const void* a, const void* b);
+
 unsigned char __is_full(SimpleMap* sm);
 SimpleMap*    __double_arrays(SimpleMap* sm);
 KeyValuePair* __set(SimpleMap* sm, KeyValuePair* key_par);
@@ -61,5 +40,5 @@ KeyValuePair* set(SimpleMap* sm, KeyValuePair* key_par, void*(cmp_fptr)(const vo
 KeyValuePair* get(SimpleMap* sm, void* key, void*(cmp_fptr)(const void* a, const void* b));
 int           __find(const SimpleMap* sm, const void* key, void*(cmp_fptr)(const void* a, const void* b));
 SimpleMap*    create_simple_map(void);
-int delete_map(SimpleMap* sm, void* (*clean_up)(void*, void*));
+int           delete_map(SimpleMap* sm, void* (*clean_up)(void*, void*));
 #endif

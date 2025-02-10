@@ -1,3 +1,3 @@
 #ifndef APP_H
-void* app_code(int fd);
+void* app_code(void* fd);
 #endif

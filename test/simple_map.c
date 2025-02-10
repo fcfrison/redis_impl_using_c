@@ -7,7 +7,22 @@
 #include "../include/simple_map.h"
 
 
-
+struct KeyNode{
+    char*            content;
+    struct timespec* input_time;
+    unsigned int     ex;
+    unsigned int     px;
+    int              size;
+};
+struct ValueNode{
+    void*       content;
+    void*       dtype;
+};
+struct ValueNodeString{
+    void*      content;
+    int        dtype;
+    int        size;
+};
 
 /*===========================================================*/
 /*UNIT TESTS*/

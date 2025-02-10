@@ -47,6 +47,8 @@ remove_key(SimpleMap* sm,
     }
     return NULL;
 }
+/*
+
 void* 
 compare(const void* a, const void* b){
     const KeyNode* el_a     = (const KeyNode*)a;
@@ -62,6 +64,7 @@ compare(const void* a, const void* b){
     }
     return NULL;
 }
+*/
 
 unsigned char __is_full(SimpleMap* sm){
     if(sm->top+1==sm->capacity){

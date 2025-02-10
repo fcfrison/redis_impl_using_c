@@ -12,6 +12,9 @@
 #include "../include/server.h"
 #include "../include/errors.h"
 #include "../include/queue.h"
+#include "../include/simple_map.h"
+
+SimpleMap* sm;
 void*
 app_code(void* arg){
     int* fd_ptr = (int*)arg;
@@ -39,7 +42,7 @@ app_code(void* arg){
                 }
                 if(array){
                     //print_array(array,0);
-                    rtn_s = parse_command(array);
+                    rtn_s = parse_command(array, sm);
                 }
                 if(array && rtn_s){
                     rtn_v = send_resp_to_clnt(rtn_s,strlen(rtn_s)+1, fd,3,500);
@@ -59,5 +62,6 @@ app_code(void* arg){
     return NULL;
 }
 int main(){
+    sm = create_simple_map();
     start_server(&app_code, 10, 5, 2, 10);
 }
