@@ -5,8 +5,11 @@
 #include <sys/time.h>
 #include "../include/protocol.h"
 #include "../include/simple_map.h"
+#include "../include/cmd_handler.h"
 #define MAX_BYTES_ARR_SIZE 20 
 #define MAX_BYTES_BULK_STR 9
+
+
 char* handle_echo_cmd(void* fst_nod);
 char* __handle_echo_cmd(void* node, int* size);
 char* handle_set_cmd(void* node, SimpleMap* sm);
@@ -111,31 +114,8 @@ handle_set_cmd(void* node, SimpleMap* sm){
     // remember that parsed_cmd must be freed;
 }
 
-enum SET_STATES{
-    JUST_SET                 = 112, // 0111 0000
-    SET_EX_PX_EXAL_PXAT = 115, // 0111 0011
-    SET_GET                  = 116, // 0111 0100
-    SET_GET_EXPX             = 119, // 0111 0111
-    SET_NXXX                 = 120, // 0111 1000
-    SET_NXXX_EXPX            = 123, // 0111 1011 
-    SET_NXXX_GET             = 124  // 0111 1100
-};
-struct KeyNode{
-    char*            content;
-    struct timespec* input_time;
-    unsigned int     ex;
-    unsigned int     px;
-    int              size;
-};
-struct ValueNode{
-    void*       content;
-    RedisDtype* dtype;
-};
-struct ValueNodeString{
-    void*      content;
-    RedisDtype dtype;
-    int        size;
-};
+
+
 KeyNode*
 create_key_node(char* content,
                 unsigned int ex,
@@ -220,17 +200,29 @@ execute_set_cmd(char state, GenericNode** parsed_cmd,  SimpleMap* sm){
     }
     ValueNode* value = create_value_node(v);
     if(!value){
-        free(key);
+        clean_up_execute_set_cmd(key, NULL);
         return NULL;
     }
+    KeyValuePair* kvp = create_key_val_pair(key,value);
     switch (state){
-        case JUST_SET:
         case SET_EX_PX_EXAL_PXAT:
         case SET_GET_EXPX:
         case SET_NXXX:
         case SET_NXXX_EXPX:
-            KeyValuePair* kvp     = create_key_val_pair(key,value);
-            KeyValuePair* rtn_kvp = set(sm,kvp,&compare);
+        case SET_BASIC:
+            int rtn           = set(sm,kvp,&compare);
+            if(rtn==ERROR_SET_SM_RTN){
+                clean_up_execute_set_cmd(key,value);
+                free(kvp);
+                return NULL;
+            }else if(rtn==SUCESS_SET){
+                //TODO: research what the the client is going to receive when a value i set;
+                //In this circumnstance, kvp remains untouched
+            }else{
+                //TODO: again, what is the clien suposed to receive as a response in this case?
+                //Here, kvp has the new preivous value; 
+            }
+
             //TODO: continue from here
             // what does it means a null value for rtn_kvp 
         case SET_GET:
@@ -238,6 +230,46 @@ execute_set_cmd(char state, GenericNode** parsed_cmd,  SimpleMap* sm){
         default:
             break;
     }
+}
+
+char*
+execute_set_basic(SimpleMap* sm,
+                  KeyValuePair* kvp,
+                  KeyNode* key,
+                  ValueNode* value){
+    int rtn = set(sm,kvp,&compare);
+    if(rtn==ERROR_SET_SM_RTN){
+        clean_up_execute_set_cmd(key,value);
+        free(kvp);
+        return NULL;
+    }else if(rtn==SUCESS_SET){
+        //TODO: research what the the client is going to receive when a value i set;
+        //In this circumnstance, kvp remains untouched
+    }else{
+        //TODO: again, what is the clien suposed to receive as a response in this case?
+        //Here, kvp has the new preivous value; 
+    }
+
+}
+
+void
+clean_up_execute_set_cmd(KeyNode* key, ValueNode* value){
+    if(key){
+        free(key->content);
+        free(key->input_time);
+        free(key);
+    }
+    if(value){
+        switch (value->dtype){
+            case BULK_STR:
+                ValueNodeString* value_ns = (ValueNodeString*)value;
+                free(value_ns->content);
+            default:
+                free(value);
+                return;
+            }
+    }
+
 }
 /**
  * Main entry point for SET command validation and parsing.
