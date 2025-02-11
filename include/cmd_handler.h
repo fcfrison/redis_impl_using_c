@@ -19,7 +19,7 @@ struct ValueNode{
     RedisDtype  dtype;
 };
 struct ValueNodeString{
-    void*      content;
+    char*      content;
     RedisDtype dtype;
     int        size;
 };

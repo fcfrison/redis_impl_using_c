@@ -188,82 +188,140 @@ execute_set_cmd(char state, GenericNode** parsed_cmd,  SimpleMap* sm){
     if(!parsed_cmd || !sm){
         return NULL;
     }
+    KeyNode*      key;
+    ValueNode*    value;
+    KeyValuePair* kvp;
+    int set_rtn;
     BulkStringNode* k = parsed_cmd[5];
     GenericNode*    v = parsed_cmd[4];
-    // The node for both key/value should've been created
     if(!k || !v){
         return NULL;
     }
-    KeyNode* key = create_key_node(k->content,0,0,k->size);
+    key = create_key_node(k->content,0,0,k->size);
     if(!key){
         return NULL;
     }
-    ValueNode* value = create_value_node(v);
+    value = create_value_node(v);
     if(!value){
         clean_up_execute_set_cmd(key, NULL);
         return NULL;
     }
-    KeyValuePair* kvp = create_key_val_pair(key,value);
+    kvp = create_key_val_pair(key,value);
     switch (state){
+        case SET_BASIC:
+            return execute_set_basic(sm, kvp, key, value);
+        case SET_GET:
+            return execute_set_get(sm, kvp, key, value);
         case SET_EX_PX_EXAL_PXAT:
         case SET_GET_EXPX:
         case SET_NXXX:
         case SET_NXXX_EXPX:
-        case SET_BASIC:
-            int rtn           = set(sm,kvp,&compare);
-            if(rtn==ERROR_SET_SM_RTN){
-                clean_up_execute_set_cmd(key,value);
-                free(kvp);
-                return NULL;
-            }else if(rtn==SUCESS_SET){
-                //TODO: research what the the client is going to receive when a value i set;
-                //In this circumnstance, kvp remains untouched
-            }else{
-                //TODO: again, what is the clien suposed to receive as a response in this case?
-                //Here, kvp has the new preivous value; 
-            }
-
-            //TODO: continue from here
-            // what does it means a null value for rtn_kvp 
-        case SET_GET:
         case SET_NXXX_GET:
         default:
             break;
     }
 }
-
 char*
-execute_set_basic(SimpleMap* sm,
-                  KeyValuePair* kvp,
-                  KeyNode* key,
-                  ValueNode* value){
+execute_set_get(SimpleMap* sm,
+                KeyValuePair* kvp,
+                KeyNode*      key,
+                ValueNode*    value){
     int rtn = set(sm,kvp,&compare);
+    char *rtn_val = NULL, *rtn_msg = "$-1\r\n";
     if(rtn==ERROR_SET_SM_RTN){
         clean_up_execute_set_cmd(key,value);
         free(kvp);
-        return NULL;
-    }else if(rtn==SUCESS_SET){
-        //TODO: research what the the client is going to receive when a value i set;
-        //In this circumnstance, kvp remains untouched
-    }else{
-        //TODO: again, what is the clien suposed to receive as a response in this case?
-        //Here, kvp has the new preivous value; 
+        return rtn_val;
     }
+    if(rtn==SUCESS_SET){
+        rtn_val = (char*)calloc(strlen(rtn_msg)+1,sizeof(char));
+        strcpy(rtn_val,rtn_msg);
+        free(kvp);
+        return rtn_val;
+    }
+    // In this case, the key was already in the map
+    if(!kvp->value){
+        clean_up_execute_set_cmd(kvp->key, kvp->value);
+        free(kvp);
+        rtn_val = (char*)calloc(strlen(rtn_msg)+1,sizeof(char));
+        strcpy(rtn_val,rtn_msg);
+        return rtn_val;
+    }
+    ValueNode* old_value = (ValueNode*)kvp->value;
+    switch (old_value->dtype){
+        case BULK_STR:
+            ValueNodeString* old_value_s = (ValueNodeString*)old_value;
+            if(old_value_s->content){
+                char* content_size_buf[16] = {0};
+                int   content_size = old_value_s->size;
+                sprintf(content_size_buf, "%d", content_size);
+                int rtn_val_size = strlen(content_size_buf) + 2 + old_value_s->size + 3;
+                rtn_val = (char*)calloc(rtn_val_size,sizeof(char));
+                int pos = 0;
+                memcpy(rtn_val,content_size_buf,strlen(content_size_buf));
+                pos+=strlen(content_size_buf);
+                memcpy(rtn_val+pos,"\r\n",2);
+                pos+=2;
+                memcpy(rtn_val+pos,old_value_s->content,old_value_s->size);
+                pos+=old_value_s->size;
+                memcpy(rtn_val+pos,"\r\n",2);
+                pos+=2;
+                rtn_val[pos] = '\0';
+                clean_up_execute_set_cmd(kvp->key, kvp->value);
+                free(kvp);
+                return rtn_val;
+            }
+        default:
+            clean_up_execute_set_cmd(kvp->key, kvp->value);
+            free(kvp);
+            rtn_val = (char*)calloc(strlen(rtn_msg)+1,sizeof(char));
+            strcpy(rtn_val,rtn_msg);
+            return rtn_val;
+    }
+}
+char*
+execute_set_basic(SimpleMap*    sm,
+                  KeyValuePair* kvp,
+                  KeyNode*      key,
+                  ValueNode*    value
+                ){
+    int rtn = set(sm,kvp,&compare);
+    char *rtn_val = NULL, *rtn_msg = "+OK\r\n";
+    if(rtn==ERROR_SET_SM_RTN){
+        clean_up_execute_set_cmd(key,value);
+        free(kvp);
+    }else if(rtn==SUCESS_SET){
+        rtn_val = (char*)calloc(strlen(rtn_msg)+1,sizeof(char));
+        strcpy(rtn_val,rtn_msg);
+        free(kvp);
+    }else{
+        clean_up_execute_set_cmd(kvp->key, kvp->value);
+        free(kvp);
+        rtn_val = (char*)calloc(strlen(rtn_msg)+1,sizeof(char));
+        strcpy(rtn_val,rtn_msg);
+    }
+    return rtn_val;
 
 }
 
 void
 clean_up_execute_set_cmd(KeyNode* key, ValueNode* value){
     if(key){
-        free(key->content);
-        free(key->input_time);
+        if(key->content){
+            free(key->content);
+        }
+        if(key->input_time){
+            free(key->input_time);
+        }
         free(key);
     }
     if(value){
         switch (value->dtype){
             case BULK_STR:
                 ValueNodeString* value_ns = (ValueNodeString*)value;
-                free(value_ns->content);
+                if(value_ns->content){
+                    free(value_ns->content);
+                }
             default:
                 free(value);
                 return;
