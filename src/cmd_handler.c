@@ -10,17 +10,9 @@
 #define MAX_BYTES_BULK_STR 9
 
 
-char* handle_echo_cmd(void* fst_nod);
-char* __handle_echo_cmd(void* node, int* size);
-char* handle_set_cmd(void* node, SimpleMap* sm);
-void validate_set_cmd(void* node, char* state, GenericNode*** parsed_cmd);
-void handle_set_options(char* state,
-                       GenericNode** parsed_cmd,
-                       GenericNode** gnode,
-                       char bit_pos);
 
-unsigned char is_set_option_valid(char* state, char bit_pos);
-void* set_cmd_stage_a(GenericNode** gnode, char* state, GenericNode** parsed_cmd);
+
+
 char*
 parse_command(void* node, SimpleMap* sm){
     GenericNode* gnode = (GenericNode*) node;
@@ -100,7 +92,6 @@ handle_set_cmd(void* node, SimpleMap* sm){
     // The void* node is already the arguments of the set cmd
     char state;
     GenericNode** parsed_cmd = NULL;
-    char* rtn_val;
     validate_set_cmd(node, &state, &parsed_cmd);
     if(state==-1){
         if(parsed_cmd){
@@ -108,8 +99,7 @@ handle_set_cmd(void* node, SimpleMap* sm){
         }
         return NULL;
     }
-
-    return NULL;
+    return execute_set_cmd(state, parsed_cmd,  sm);
     // Next step is decide what to do, based on the current state
     // remember that parsed_cmd must be freed;
 }
@@ -134,9 +124,9 @@ create_key_node(char* content,
     kn->content = (char*)calloc(size+1,sizeof(char));
     memcpy(kn->content,content,size);
     kn->content[size] = '\0';
-    kn->ex;
-    kn->px;
-    kn->size;
+    kn->ex   = ex;
+    kn->px   = px;
+    kn->size = size;
     kn->input_time = ts;
     return kn;
 }
@@ -155,7 +145,7 @@ create_value_node_string(char* content, RedisDtype dtype, int size){
     ((char*)vns->content)[size] = '\0';
     vns->dtype = dtype;
     vns->size  = size;
-    return vns;
+    return (ValueNode*)vns;
 };
 ValueNode*
 create_value_node(GenericNode* gnode){
@@ -174,7 +164,7 @@ void* compare(const void* a, const void* b){
     if(ka->size!=kb->size){
         return NULL;
     }
-    for(size_t i = 0; i < ka->size; i++){
+    for(int i = 0; i < ka->size; i++){
         if(ka->content[i]!=kb->content[i]){
             return NULL;
         }
@@ -184,16 +174,16 @@ void* compare(const void* a, const void* b){
 
 char*
 execute_set_cmd(char state, GenericNode** parsed_cmd,  SimpleMap* sm){
-    char* rtn_val;
+    //char* rtn_val;
     if(!parsed_cmd || !sm){
         return NULL;
     }
     KeyNode*      key;
     ValueNode*    value;
     KeyValuePair* kvp;
-    int set_rtn;
-    BulkStringNode* k = parsed_cmd[5];
-    GenericNode*    v = parsed_cmd[4];
+    //int set_rtn;
+    BulkStringNode* k = (BulkStringNode*)parsed_cmd[5];
+    GenericNode*    v = (GenericNode*)parsed_cmd[4];
     if(!k || !v){
         return NULL;
     }
@@ -220,6 +210,7 @@ execute_set_cmd(char state, GenericNode** parsed_cmd,  SimpleMap* sm){
         default:
             break;
     }
+    return NULL;
 }
 char*
 execute_set_get(SimpleMap* sm,
@@ -252,7 +243,7 @@ execute_set_get(SimpleMap* sm,
         case BULK_STR:
             ValueNodeString* old_value_s = (ValueNodeString*)old_value;
             if(old_value_s->content){
-                char* content_size_buf[16] = {0};
+                char content_size_buf[16] = {0};
                 int   content_size = old_value_s->size;
                 sprintf(content_size_buf, "%d", content_size);
                 int rtn_val_size = strlen(content_size_buf) + 2 + old_value_s->size + 3;
@@ -398,6 +389,13 @@ handle_set_options(char* state,
                   GenericNode** parsed_cmd,
                   GenericNode** gnode,
                   char bit_pos){
+    if(state==NULL){
+        return;
+    }
+    if(!*gnode || !parsed_cmd){
+        *state = -1;
+        return;
+    }
     if(!is_set_option_valid(state,bit_pos)){
         *state = -1;
         return;
@@ -428,7 +426,7 @@ is_set_option_valid(char* state, char bit_pos){
     }
     unsigned char is_not_zero = 0;
     while(bit_pos>-1){
-        is_not_zero = state[(int)bit_pos] & 1<<bit_pos;
+        is_not_zero = *state & 1<<bit_pos;
         if(is_not_zero){
             return 0;
         }

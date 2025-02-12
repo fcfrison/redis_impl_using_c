@@ -1,4 +1,5 @@
 #ifndef SIMPLE_MAP_H
+#define SIMPLE_MAP_H
 typedef struct KeyWrapper KeyWrapper;
 typedef struct ValueWrapper ValueWrapper;
 typedef struct SimpleMap SimpleMap;
@@ -41,5 +42,4 @@ int set(SimpleMap* sm, KeyValuePair* key_par, void*(cmp_fptr)(const void* a, con
 KeyValuePair* get(SimpleMap* sm, void* key, void*(cmp_fptr)(const void* a, const void* b));
 int           __find(const SimpleMap* sm, const void* key, void*(cmp_fptr)(const void* a, const void* b));
 SimpleMap*    create_simple_map(void);
-int           delete_map(SimpleMap* sm, void* (*clean_up)(void*, void*));
-#endif
+#endif // SIMPLE_MAP_H        delete_map(SimpleMap* sm, void* (*clean_up)(void*, void*));

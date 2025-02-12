@@ -12,6 +12,18 @@
                 "isDefault": true
             },
             "problemMatcher": "$gcc"
+        },
+        {
+            "label": "build-tests",
+            "type": "shell",
+            "command": "make",
+            "args": ["test"],  // Run the `test` target in the Makefile
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            },
+            "problemMatcher": ["$gcc"],
+            "detail": "Compile and build test executable"
         }
     ]
 }

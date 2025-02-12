@@ -1,4 +1,5 @@
 #ifndef SERVER_H
+#define SERVER_H
 #define MAX_QUEUE_TIME  5
 #define MAX_APP_WORKERS 100
 #define RECV_TIMEOUT    10
