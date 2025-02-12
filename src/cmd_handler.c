@@ -92,8 +92,8 @@ handle_set_cmd(void* node, SimpleMap* sm){
     // The void* node is already the arguments of the set cmd
     char state;
     GenericNode** parsed_cmd = NULL;
-    validate_set_cmd(node, &state, &parsed_cmd);
-    if(state==-1){
+    void* is_valid = validate_set_cmd(node, &state, &parsed_cmd);
+    if(!is_valid){
         if(parsed_cmd){
             free(parsed_cmd);
         }
@@ -331,44 +331,45 @@ clean_up_execute_set_cmd(KeyNode* key, ValueNode* value){
  * @param state Pointer to parsing state (tracks progress and errors)
  * @param parsed_cmd Triple pointer to store parsed command components (array of 6 elements)
  */
-void
+void*
 validate_set_cmd(void* node, char* state, GenericNode*** parsed_cmd){
-    if(!node){
-        *state = -1;
-        return;
+    if(!state){
+        return NULL;
     }
-    *state = 0;
-    *state = 1<<6;
+    if(!node){
+        return NULL;
+    }
     GenericNode* gnode = (GenericNode*)node;
     *parsed_cmd = calloc(6,sizeof(GenericNode*)); 
     BulkStringNode* blk_s_nd = NULL;
     char* option = NULL;
-    set_cmd_stage_a(&gnode, state, *parsed_cmd);
-    while(gnode && *state>0){
-        if(gnode->node->type!=BULK_STR){
-            *state = -1;
-            continue;
+    GenericNode* next = set_cmd_stage_a(gnode, state, *parsed_cmd);
+    while(next && *state>0){
+        if(next->node->type!=BULK_STR){
+            return NULL;
         }
-        blk_s_nd = (BulkStringNode*) gnode;
+        blk_s_nd = (BulkStringNode*) next;
         option   = blk_s_nd->content;
         if(!strcmp(option,"NX") || !strcmp(option,"XX")){
-            handle_set_options(state, *parsed_cmd, &gnode,3);  
+            handle_set_options(state, *parsed_cmd, &next,3);  
         }else if(!strcmp(option,"GET")){
-            handle_set_options(state, *parsed_cmd, &gnode,2);
+            handle_set_options(state, *parsed_cmd, &next,2);
         }else if(!strcmp(option,"EX")   || !strcmp(option,"PX") ||
                  !strcmp(option,"EXAT") || !strcmp(option,"PXAT")){
-            handle_set_options(state, *parsed_cmd, &gnode,1);
-            if(!gnode || gnode->node->type!=BULK_STR || gnode->node->next){
-                *state = -1;
+            handle_set_options(state, *parsed_cmd, &next,1);
+            if(!next || next->node->type!=BULK_STR || next->node->next){
+                return NULL;
             }
-            handle_set_options(state, *parsed_cmd, &gnode,0);
+            handle_set_options(state, *parsed_cmd, &next,0);
         }
         else{
-            *state = -1;
-            break;
+            return NULL;
         }   
     }
-    return;
+    if(*state<0){
+        return NULL;
+    }
+    return state;
 }
 
 /**
@@ -452,33 +453,38 @@ is_set_option_valid(char* state, char bit_pos){
  * @param parsed_cmd Array to store parsed components
  * @return Always returns NULL (state tracking handled via state parameter)
  */
-void*
-set_cmd_stage_a(GenericNode** gnode, char* state, GenericNode** parsed_cmd){
-    if(!gnode){
+GenericNode*
+set_cmd_stage_a(GenericNode* gnode, char* state, GenericNode** parsed_cmd){
+    if(!state){
         return NULL;
     }
-    *state = 1<<6;
+    GenericNode* temp_gnode = gnode;    
+    if(!gnode || !parsed_cmd){
+        *state = -1;
+        return NULL;
+    }
+    *state = 0b01000000;
     do{
         switch (*state){
-        case 64:
-            if((((*gnode)->node->type)!=BULK_STR) || (!(*gnode)->node->next)){
-                *state = -1;
-                continue;
+            case 0b01000000:
+                if(!temp_gnode->node ||  ((temp_gnode->node->type)!=BULK_STR) || (!temp_gnode->node->next)){
+                    *state = -1;
+                    return NULL;
+                }
+                *state = *state | (1<<5);
+                parsed_cmd[5] = temp_gnode;
+                temp_gnode = temp_gnode->node->next;
+                break;
+            case 0b01100000:
+                if(!temp_gnode->node || (temp_gnode->node->type!=BULK_STR)){
+                    *state=-1;
+                    return NULL;
+                }
+                *state = *state | (1<<4);
+                parsed_cmd[4] = temp_gnode;
+                temp_gnode = temp_gnode->node->next;
+                break;
             }
-            *state = *state | (1<<5) ;
-            parsed_cmd[5] = *gnode;
-            *gnode = (*gnode)->node->next;
-            break;
-        case 96:
-           if(((*gnode)->node->type)!=BULK_STR){
-            *state=-1;
-            continue;
-           }
-           *state = *state | (1<<4);
-           parsed_cmd[4] = *gnode;
-           *gnode = (*gnode)->node->next;
-           break;
-        }
-    } while((0<*state) &&(*state<112));
-    return NULL;
+    } while((*state>0) &&(*state<112));
+    return temp_gnode;
 }
