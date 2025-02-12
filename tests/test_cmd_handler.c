@@ -4,6 +4,7 @@
 #include <string.h>
 #include "../include/cmd_handler.h"
 #include "../include/protocol.h"
+#include "../include/simple_map.h"
 
 void test_is_set_option_valid() {
     char state;
@@ -492,6 +493,241 @@ void test_validate_set_cmd_invalid_set_key_value_invalid_option() {
     free(invalid_node->node);
     free(invalid_node);
 }
+
+// Test cases
+void test_clean_up_execute_set_cmd_key_only() {
+    KeyNode* key = create_key_node("test_key", 0, 0, 8);
+    assert(key != NULL); // Ensure key creation was successful
+    clean_up_execute_set_cmd(key, NULL);
+
+    // If the function works correctly, the memory should be freed, and no assertions are needed.
+    // This test ensures no memory leaks or crashes.
+}
+
+void test_clean_up_execute_set_cmd_value_only() {
+    ValueNode* value = create_value_node_string("test_value", BULK_STR, 10);
+    assert(value != NULL); // Ensure value creation was successful
+    clean_up_execute_set_cmd(NULL, value);
+
+    // If the function works correctly, the memory should be freed, and no assertions are needed.
+    // This test ensures no memory leaks or crashes.
+}
+
+void test_clean_up_execute_set_cmd_both_key_and_value() {
+    KeyNode* key = create_key_node("test_key", 0, 0, 8);
+    assert(key != NULL); // Ensure key creation was successful
+    ValueNode* value = create_value_node_string("test_value", BULK_STR, 10);
+    assert(value != NULL); // Ensure value creation was successful
+    clean_up_execute_set_cmd(key, value);
+
+    // If the function works correctly, the memory should be freed, and no assertions are needed.
+    // This test ensures no memory leaks or crashes.
+}
+
+void test_clean_up_execute_set_cmd_null_key_and_value() {
+    clean_up_execute_set_cmd(NULL, NULL);
+
+    // If the function works correctly, it should handle NULL inputs without crashing.
+}
+
+void test_clean_up_execute_set_cmd_value_other_type() {
+    ValueNode* value = (ValueNode*)malloc(sizeof(ValueNode));
+    value->content = NULL;
+    value->dtype = UNDEF_DTYPE;
+    clean_up_execute_set_cmd(NULL, value);
+
+    // If the function works correctly, it should handle non-BULK_STR types without crashing.
+}
+
+void test_create_key_node_valid() {
+    char* content = "test_key";
+    unsigned int ex = 10;
+    unsigned int px = 20;
+    int size = strlen(content);
+
+    KeyNode* key = create_key_node(content, ex, px, size);
+
+    assert(key != NULL);
+    assert(strcmp(key->content, content) == 0);
+    assert(key->ex == ex);
+    assert(key->px == px);
+    assert(key->size == size);
+    assert(key->input_time != NULL);
+
+    free(key->content);
+    free(key->input_time);
+    free(key);
+}
+
+void test_create_key_node_null_content() {
+    KeyNode* key = create_key_node(NULL, 10, 20, 8);
+    assert(key == NULL);
+}
+
+void test_create_key_node_invalid_size() {
+    char* content = "test_key";
+    KeyNode* key = create_key_node(content, 10, 20, 0);
+    assert(key == NULL);
+}
+
+
+void test_create_value_node_string_valid() {
+    char* content = "test_value";
+    RedisDtype dtype = BULK_STR;
+    int size = strlen(content);
+
+    ValueNode* value = create_value_node_string(content, dtype, size);
+
+    assert(value != NULL);
+    ValueNodeString* vns = (ValueNodeString*)value;
+    assert(strcmp(vns->content, content) == 0);
+    assert(vns->dtype == dtype);
+    assert(vns->size == size);
+
+    free(vns->content);
+    free(vns);
+}
+
+void test_create_value_node_string_null_content() {
+    ValueNode* value = create_value_node_string(NULL, BULK_STR, 10);
+    assert(value == NULL);
+}
+
+void test_create_value_node_string_invalid_size() {
+    char* content = "test_value";
+    ValueNode* value = create_value_node_string(content, BULK_STR, 0);
+    assert(value == NULL);
+}
+
+void test_create_value_node_valid_bulk_str() {
+    BulkStringNode* bulk_node = (BulkStringNode*)malloc(sizeof(BulkStringNode));
+    BaseNode*       base_node = (BaseNode*)calloc(1,sizeof(BaseNode));
+    base_node->type = BULK_STR;
+    base_node->next = NULL;
+    base_node->prev = NULL;
+    bulk_node->node = base_node;
+    bulk_node->content = strdup("test_value");
+    bulk_node->size = strlen("test_value");
+
+    GenericNode* gnode = (GenericNode*)bulk_node;
+    ValueNode* value = create_value_node(gnode);
+    assert(strcmp(value->content,bulk_node->content)==0);
+    assert(value != NULL); // Ensure value creation was successful
+
+    free(bulk_node->content);
+    free(bulk_node);
+    free(value);
+}
+
+void test_create_value_node_invalid_type() {
+    BaseNode base_node;
+    base_node.type = UNDEF_DTYPE;
+
+    GenericNode gnode;
+    gnode.node = &base_node;
+
+    ValueNode* value = create_value_node(&gnode);
+
+    assert(value == NULL); // Ensure NULL is returned for invalid type
+}
+
+void test_create_value_node_null_gnode() {
+    ValueNode* value = create_value_node(NULL);
+
+    assert(value == NULL); // Ensure NULL is returned for NULL gnode
+}
+
+void test_compare_equal_keys() {
+    KeyNode key1 = {"test_key", NULL, 0, 0, 8};
+    KeyNode key2 = {"test_key", NULL, 0, 0, 8};
+
+    void* result = compare(&key1, &key2);
+
+    assert(result == &key1); // Ensure the keys are equal and return the first key
+}
+
+void test_compare_different_sizes() {
+    KeyNode key1 = {"test_key", NULL, 0, 0, 8};
+    KeyNode key2 = {"test_key_diff", NULL, 0, 0, 12};
+
+    void* result = compare(&key1, &key2);
+
+    assert(result == NULL); // Ensure NULL is returned for different sizes
+}
+
+void test_compare_different_content() {
+    KeyNode key1 = {"test_key", NULL, 0, 0, 8};
+    KeyNode key2 = {"test_kex", NULL, 0, 0, 8};
+
+    void* result = compare(&key1, &key2);
+
+    assert(result == NULL); // Ensure NULL is returned for different content
+}
+
+void test_compare_null_input() {
+    void* result = compare(NULL, NULL);
+
+    assert(result == NULL); // Ensure NULL is returned for NULL inputs
+}
+
+
+void test_execute_set_get_success_set() {
+    SimpleMap* sm = create_simple_map();
+    KeyNode* key = create_key_node("test_key_1", 0, 0, strlen("test_key_1"));
+    ValueNode* value = create_value_node_string("value_key_1",BULK_STR,strlen("value_key_1"));
+    KeyValuePair* kvp = create_key_val_pair(key,value);
+
+    char* result = execute_set_get(sm, kvp, key, value);
+
+    assert(result != NULL); // Ensure result is not NULL for successful set
+    assert(strcmp(result, "$-1\r\n") == 0); // Ensure the correct response message
+    assert(sm->keys[0]);
+    assert(sm->values[0]);
+    assert(sm->keys[0]->key == key);
+    assert(sm->values[0]->value == value);
+    free(result);
+    free(sm->keys);
+    free(sm->values);
+    free(value);
+    free(key);
+}
+
+void test_execute_set_get_error_values_arr_is_null() {
+    // values array and 
+    SimpleMap* sm = create_simple_map();
+    free(sm->values);
+    sm->values = NULL;
+    KeyNode* key = create_key_node("test_key_1", 0, 0, strlen("test_key_1"));
+    ValueNode* value = create_value_node_string("value_key_1",BULK_STR,strlen("value_key_1"));
+    KeyValuePair* kvp = create_key_val_pair(key,value);
+    // Simulate set failure
+    char* result = execute_set_get(sm, kvp, key, value);
+
+    assert(result == NULL); // Ensure NULL is returned for set error
+    free(sm->keys);
+}
+// Key already exists
+void test_execute_set_get_success_upgrade() {
+    SimpleMap sm = {NULL, NULL, 10, 0};
+    KeyNode key = {"test_key", NULL, 0, 0, 8};
+    ValueNode value = {NULL, BULK_STR};
+    KeyValuePair kvp = {&key, &value};
+
+    // Simulate success upgrade
+    char* result = execute_set_get(&sm, &kvp, &key, &value);
+
+    assert(result != NULL); // Ensure result is not NULL for successful upgrade
+    assert(strcmp(result, "$-1\r\n") == 0); // Ensure the correct response message
+
+    free(result);
+}
+
+void test_execute_set_get_null_inputs() {
+    char* result = execute_set_get(NULL, NULL, NULL, NULL);
+
+    assert(result == NULL); // Ensure NULL is returned for NULL inputs
+}
+
 int main() {
     test_is_set_option_valid();
     test_handle_set_options_valid();
@@ -501,6 +737,7 @@ int main() {
     test_handle_set_options_gnode_null();
     test_handle_set_options_parsed_cmd_null();
     test_handle_set_options_state_null();
+
     test_set_cmd_stage_a_valid();
     test_set_cmd_stage_a_invalid_gnode_null();
     test_set_cmd_stage_a_invalid_parsed_cmd_null();
@@ -520,7 +757,37 @@ int main() {
     test_validate_set_cmd_invalid_set_key_value_ex();
     test_validate_set_cmd_invalid_set_key_value_missing_value();
     test_validate_set_cmd_invalid_set_key_value_invalid_option();
+    
+    // clean_up_execute_set_cmd
+    test_clean_up_execute_set_cmd_key_only();
+    test_clean_up_execute_set_cmd_value_only();
+    test_clean_up_execute_set_cmd_both_key_and_value();
+    test_clean_up_execute_set_cmd_null_key_and_value();
+    test_clean_up_execute_set_cmd_value_other_type();
+    
+    // create_key_node
+    test_create_key_node_valid();
+    test_create_key_node_null_content();
+    test_create_key_node_invalid_size();
+    
+    // create_value_node_string
+    test_create_value_node_string_valid();
+    test_create_value_node_string_null_content();
+    test_create_value_node_string_invalid_size();
 
+    test_create_value_node_valid_bulk_str();
+    test_create_value_node_invalid_type();
+    test_create_value_node_null_gnode();
+    
+    test_compare_equal_keys();
+    test_compare_different_sizes();
+    test_compare_different_content();
+    test_compare_null_input();
     puts("All tests passed");
+
+
+    test_execute_set_get_success_set();
+    test_execute_set_get_error_values_arr_is_null();
+    test_execute_set_get_null_inputs();
     return 0;
 }

@@ -149,6 +149,9 @@ create_value_node_string(char* content, RedisDtype dtype, int size){
 };
 ValueNode*
 create_value_node(GenericNode* gnode){
+    if(!gnode || !gnode->node->type){
+        return NULL;
+    }
     switch (gnode->node->type){
         case BULK_STR:
             BulkStringNode* node = (BulkStringNode*)gnode;
@@ -159,6 +162,9 @@ create_value_node(GenericNode* gnode){
 }
 
 void* compare(const void* a, const void* b){
+    if(!a || !b){
+        return NULL;
+    }
     KeyNode* ka = (KeyNode*) a;
     KeyNode* kb = (KeyNode*) b;
     if(ka->size!=kb->size){
@@ -213,10 +219,18 @@ execute_set_cmd(char state, GenericNode** parsed_cmd,  SimpleMap* sm){
     return NULL;
 }
 char*
-execute_set_get(SimpleMap* sm,
+execute_set_get(SimpleMap*    sm,
                 KeyValuePair* kvp,
                 KeyNode*      key,
                 ValueNode*    value){
+    if(!key || !value      || !kvp
+            || !sm->values || !sm->keys){
+        clean_up_execute_set_cmd(key,value);
+        if(kvp){
+            free(kvp);
+        }
+        return NULL;
+    }
     int rtn = set(sm,kvp,&compare);
     char *rtn_val = NULL, *rtn_msg = "$-1\r\n";
     if(rtn==ERROR_SET_SM_RTN){
@@ -313,12 +327,14 @@ clean_up_execute_set_cmd(KeyNode* key, ValueNode* value){
                 if(value_ns->content){
                     free(value_ns->content);
                 }
+                break;
             default:
-                free(value);
-                return;
+                break;
             }
+        if(value){
+            free(value);
+        }
     }
-
 }
 /**
  * Main entry point for SET command validation and parsing.
