@@ -149,7 +149,7 @@ create_value_node_string(char* content, RedisDtype dtype, int size){
 };
 ValueNode*
 create_value_node(GenericNode* gnode){
-    if(!gnode || !gnode->node->type){
+    if(!gnode || !gnode->node || !gnode->node->type){
         return NULL;
     }
     switch (gnode->node->type){
@@ -205,7 +205,7 @@ execute_set_cmd(char state, GenericNode** parsed_cmd,  SimpleMap* sm){
     kvp = create_key_val_pair(key,value);
     switch (state){
         case SET_BASIC:
-            return execute_set_basic(sm, kvp, key, value);
+            return execute_set_basic(sm, kvp);
         case SET_GET:
             return execute_set_get(sm, kvp);
         case SET_EX_PX_EXAL_PXAT:
@@ -322,14 +322,26 @@ execute_set_get(SimpleMap*    sm,
 }
 char*
 execute_set_basic(SimpleMap*    sm,
-                  KeyValuePair* kvp,
-                  KeyNode*      key,
-                  ValueNode*    value
+                  KeyValuePair* kvp
                 ){
+    if(!kvp || !kvp->key || !kvp->value
+            || !sm->values || !sm->keys){
+        if(kvp){
+            clean_up_execute_set_cmd(kvp->key,kvp->value);
+            free(kvp);
+        }
+        return NULL;
+    }
+    if(!((KeyNode*)kvp->key)->content){
+        clean_up_execute_set_cmd(kvp->key,kvp->value);
+        free(kvp);
+        return NULL;
+    }
     int rtn = set(sm,kvp,&compare);
     char *rtn_val = NULL, *rtn_msg = "+OK\r\n";
     if(rtn==ERROR_SET_SM_RTN){
-        clean_up_execute_set_cmd(key,value);
+        rtn_val = (char*)calloc(strlen("$-1\r\n")+1,sizeof(char));
+        clean_up_execute_set_cmd(kvp->key,kvp->value);
         free(kvp);
     }else if(rtn==SUCESS_SET){
         rtn_val = (char*)calloc(strlen(rtn_msg)+1,sizeof(char));

@@ -48,6 +48,6 @@ char*         execute_set_cmd(char state, GenericNode** parsed_cmd,  SimpleMap* 
 GenericNode*  set_cmd_stage_a(GenericNode* gnode, char* state, GenericNode** parsed_cmd);
 KeyNode*      create_key_node(char* content, unsigned int ex, unsigned int px, int size);
 char*         execute_set_get(SimpleMap* sm, KeyValuePair* kvp);
-char*         execute_set_basic(SimpleMap* sm, KeyValuePair* kvp, KeyNode* key, ValueNode* value);
+char*         execute_set_basic(SimpleMap* sm, KeyValuePair* kvp);
 void          handle_set_options(char* state, GenericNode** parsed_cmd, GenericNode** gnode, char bit_pos);
 #endif 

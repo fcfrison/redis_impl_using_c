@@ -733,6 +733,7 @@ void test_execute_set_get_null_inputs() {
     char* result = execute_set_get(NULL, NULL);
 
     assert(result == NULL); // Ensure NULL is returned for NULL inputs
+    return;
 }
 void test_execute_set_get_error_null_key() {
     SimpleMap* sm       = create_simple_map();
@@ -747,6 +748,7 @@ void test_execute_set_get_error_null_key() {
     char* result        = execute_set_get(sm, kvp);
     assert(result==NULL);
     free(sm);
+    return;
 }
 
 // It's possible to set null content values;
@@ -774,6 +776,7 @@ void test_execute_set_get_sucess_null_content_value() {
     free(sm->values[0]->value);
     free(sm->values[0]);
     free(sm->values);
+    return;
 }
 void test_execute_set_get_sucess_replace_null_content_value() {
     SimpleMap* sm       = create_simple_map();
@@ -807,7 +810,295 @@ void test_execute_set_get_sucess_replace_null_content_value() {
     free(sm->values[0]->value);
     free(sm->values[0]);
     free(sm->values);
+    return;
 }
+
+void test_execute_set_basic_success_set() {
+    SimpleMap* sm = create_simple_map();
+    KeyValuePair* kvp   = create_key_val_pair(
+        create_key_node("test_key_1", 0, 0, strlen("test_key_1")),
+        create_value_node_string("value_key_1",BULK_STR,strlen("value_key_1")));
+
+    char* result = execute_set_basic(sm, kvp);
+
+    assert(result != NULL); // Ensure result is not NULL for successful set
+    assert(strcmp(result, "+OK\r\n") == 0); // Ensure the correct response message
+    assert(strcmp(((KeyNode*)sm->keys[0]->key)->content,"test_key_1")==0);
+    assert(strcmp(((ValueNodeString*)sm->values[0]->value)->content,"value_key_1")==0);
+    free(result);
+    free(((KeyNode*)sm->keys[0]->key)->content);
+    free(((KeyNode*)sm->keys[0]->key)->input_time);
+    free(((KeyNode*)sm->keys[0]->key));
+    free(sm->keys[0]);
+    free(sm->keys);
+    free(sm->values[0]->value);
+    free(sm->values[0]);
+    free(sm->values);
+    return;
+
+}
+
+void test_execute_set_basic_success_upgrade() {
+    SimpleMap* sm = create_simple_map();
+    KeyValuePair* kvp   = create_key_val_pair(
+        create_key_node("test_key_1", 0, 0, strlen("test_key_1")),
+        create_value_node_string("value_key_1",BULK_STR,strlen("value_key_1")));
+    char* result = execute_set_basic(sm, kvp);
+    KeyValuePair* kvp_1   = create_key_val_pair(
+        create_key_node("test_key_1", 0, 0, strlen("test_key_1")),
+        create_value_node_string("value_key_2",BULK_STR,strlen("value_key_2")));
+    result = execute_set_basic(sm, kvp_1);
+    assert(result != NULL); // Ensure result is not NULL for successful set
+    assert(strcmp(result, "+OK\r\n") == 0); // Ensure the correct response message
+    assert(strcmp(((KeyNode*)sm->keys[0]->key)->content,"test_key_1")==0);
+    assert(strcmp(((ValueNodeString*)sm->values[0]->value)->content,"value_key_2")==0);
+    free(result);
+    free(((KeyNode*)sm->keys[0]->key)->content);
+    free(((KeyNode*)sm->keys[0]->key)->input_time);
+    free(((KeyNode*)sm->keys[0]->key));
+    free(sm->keys[0]);
+    free(sm->keys);
+    free(sm->values[0]->value);
+    free(sm->values[0]);
+    free(sm->values);
+}
+void test_execute_set_basic_null_inputs() {
+    char* result = execute_set_basic(NULL, NULL);
+
+    assert(result == NULL); // Ensure NULL is returned for NULL inputs
+}
+
+void test_execute_set_basic_key_null_content() {
+    SimpleMap* sm       = create_simple_map();
+    KeyValuePair* kvp   = create_key_val_pair(
+                                    create_key_node("test_key_1", 0, 0, strlen("test_key_1")),
+                                    create_value_node_string("value_key_1",BULK_STR,strlen("value_key_1"))
+                                );
+    char* content = ((KeyNode*)kvp->key)->content;
+    ((KeyNode*)kvp->key)->content = NULL;
+    free(content);
+    // Simulate success upgrade
+    char* result = execute_set_basic(sm, kvp);
+    assert(result==NULL);
+    free(sm->keys);
+    free(sm->values);
+    free(sm);
+    return;
+    
+}
+void test_execute_set_basic_empty_key() {
+    SimpleMap* sm = create_simple_map();
+    ValueNode* vns = create_value_node_string("value_key_1",BULK_STR,strlen("value_key_1"));
+    KeyValuePair* kvp = (KeyValuePair*)malloc(sizeof(KeyValuePair));
+    kvp->key=NULL;
+    kvp->value = (char*)vns;
+    char* result = execute_set_basic(sm, kvp);
+    assert(result==NULL);
+    free(sm->keys);
+    free(sm->values);
+    free(sm);
+}
+
+// execute_set_cmd
+void test_execute_set_cmd_set_basic() {
+    SimpleMap* sm = create_simple_map();
+    BulkStringNode* key_node = (BulkStringNode*)malloc(sizeof(BulkStringNode));
+    BaseNode* bn = (BaseNode*)malloc(sizeof(BaseNode));
+    bn->next = bn->prev = NULL;
+    bn->type = BULK_STR;
+    key_node->content = (char*)malloc(strlen("test_key")*sizeof(char));
+    strcpy(key_node->content,"test_key");
+    key_node->node = bn;
+    key_node->size = 8;
+    BulkStringNode* value_node = (BulkStringNode*)malloc(sizeof(BulkStringNode));
+    BaseNode* bn_vn = (BaseNode*)malloc(sizeof(BaseNode));
+    bn_vn->next = bn_vn->prev = NULL;
+    bn_vn->type = BULK_STR;
+    value_node->content = (char*)malloc(strlen("test_value")*sizeof(char));
+    strcpy(value_node->content, "test_value");
+    value_node->node = bn_vn;
+    value_node->size = strlen(value_node->content);
+    GenericNode** parsed_cmd = (GenericNode**)calloc(6,sizeof(GenericNode*));
+    parsed_cmd[5] = (GenericNode*)key_node;
+    parsed_cmd[4] = (GenericNode*)value_node;
+    char* result = execute_set_cmd(SET_BASIC, parsed_cmd, sm);
+
+    assert(result != NULL); // Ensure result is not NULL for SET_BASIC
+    assert(strcmp(result, "+OK\r\n") == 0); // Ensure the correct response message
+    assert(strcmp(((KeyNode*)sm->keys[0]->key)->content, "test_key")==0);
+    assert(strcmp(((ValueNode*)sm->values[0]->value)->content, "test_value")==0);
+    free(result);
+    free(((KeyNode*)sm->keys[0]->key)->content);
+    free(((KeyNode*)sm->keys[0]->key)->input_time);
+    free(((KeyNode*)sm->keys[0]->key));
+    free(sm->keys[0]);
+    free(sm->keys);
+    free(sm->values[0]->value);
+    free(sm->values[0]);
+    free(sm->values);
+}
+
+void test_execute_set_cmd_set_get_no_previous_key() {
+    SimpleMap* sm = create_simple_map();
+    BulkStringNode* key_node = (BulkStringNode*)malloc(sizeof(BulkStringNode));
+    BaseNode* bn = (BaseNode*)malloc(sizeof(BaseNode));
+    bn->next = bn->prev = NULL;
+    bn->type = BULK_STR;
+    key_node->content = (char*)malloc(strlen("test_key")*sizeof(char));
+    strcpy(key_node->content,"test_key");
+    key_node->node = bn;
+    key_node->size = 8;
+    BulkStringNode* value_node = (BulkStringNode*)malloc(sizeof(BulkStringNode));
+    BaseNode* bn_vn = (BaseNode*)malloc(sizeof(BaseNode));
+    bn_vn->next = bn_vn->prev = NULL;
+    bn_vn->type = BULK_STR;
+    value_node->content = (char*)malloc(strlen("test_value")*sizeof(char));
+    strcpy(value_node->content, "test_value");
+    value_node->node = bn_vn;
+    value_node->size = strlen(value_node->content);
+    GenericNode** parsed_cmd = (GenericNode**)calloc(6,sizeof(GenericNode*));
+    parsed_cmd[5] = (GenericNode*)key_node;
+    parsed_cmd[4] = (GenericNode*)value_node;
+    char* result = execute_set_cmd(SET_GET, parsed_cmd, sm);
+
+    assert(result != NULL); // Ensure result is not NULL for SET_BASIC
+    assert(strcmp(result, "$-1\r\n") == 0); // Ensure the correct response message
+    assert(strcmp(((KeyNode*)sm->keys[0]->key)->content, "test_key")==0);
+    assert(strcmp(((ValueNode*)sm->values[0]->value)->content, "test_value")==0);
+    free(result);
+    free(((KeyNode*)sm->keys[0]->key)->content);
+    free(((KeyNode*)sm->keys[0]->key)->input_time);
+    free(((KeyNode*)sm->keys[0]->key));
+    free(sm->keys[0]);
+    free(sm->keys);
+    free(sm->values[0]->value);
+    free(sm->values[0]);
+    free(sm->values);
+}
+void test_execute_set_cmd_set_get_upgrade() {
+    SimpleMap* sm = create_simple_map();
+    BulkStringNode* key_node = (BulkStringNode*)malloc(sizeof(BulkStringNode));
+    BaseNode* bn = (BaseNode*)malloc(sizeof(BaseNode));
+    bn->next = bn->prev = NULL;
+    bn->type = BULK_STR;
+    key_node->content = (char*)malloc(strlen("test_key")*sizeof(char));
+    strcpy(key_node->content,"test_key");
+    key_node->node = bn;
+    key_node->size = 8;
+    BulkStringNode* value_node = (BulkStringNode*)malloc(sizeof(BulkStringNode));
+    BaseNode* bn_vn = (BaseNode*)malloc(sizeof(BaseNode));
+    bn_vn->next = bn_vn->prev = NULL;
+    bn_vn->type = BULK_STR;
+    value_node->content = (char*)malloc(strlen("test_value")*sizeof(char));
+    strcpy(value_node->content, "test_value");
+    value_node->node = bn_vn;
+    value_node->size = strlen(value_node->content);
+    GenericNode** parsed_cmd = (GenericNode**)calloc(6,sizeof(GenericNode*));
+    parsed_cmd[5] = (GenericNode*)key_node;
+    parsed_cmd[4] = (GenericNode*)value_node;
+    char* result = execute_set_cmd(SET_GET, parsed_cmd, sm);
+
+
+    BulkStringNode* new_key_node = (BulkStringNode*)malloc(sizeof(BulkStringNode));
+    BaseNode* bn_new_key_node = (BaseNode*)malloc(sizeof(BaseNode));
+    bn_new_key_node->next = bn_new_key_node->prev = NULL;
+    bn_new_key_node->type = BULK_STR;
+    new_key_node->content = (char*)malloc(strlen("test_key")*sizeof(char));
+    strcpy(new_key_node->content,"test_key");
+    new_key_node->node = bn_new_key_node;
+    new_key_node->size = 8;
+    BulkStringNode* new_value_node = (BulkStringNode*)malloc(sizeof(BulkStringNode));
+    BaseNode* bn_vn_new_value_node = (BaseNode*)malloc(sizeof(BaseNode));
+    bn_vn_new_value_node->next = bn_vn_new_value_node->prev = NULL;
+    bn_vn_new_value_node->type = BULK_STR;
+    new_value_node->content = (char*)malloc(strlen("test_value_66")*sizeof(char));
+    strcpy(new_value_node->content, "test_value_66");
+    new_value_node->node = bn_vn_new_value_node;
+    new_value_node->size = strlen(new_value_node->content);
+    parsed_cmd[5] = (GenericNode*)new_key_node;
+    parsed_cmd[4] = (GenericNode*)new_value_node;
+    result = execute_set_cmd(SET_GET, parsed_cmd, sm);
+    assert(result != NULL); // Ensure result is not NULL for SET_BASIC
+    assert(strcmp(result, "$10\r\ntest_value\r\n") == 0); // Ensure the correct response message
+    assert(strcmp(((KeyNode*)sm->keys[0]->key)->content, "test_key")==0);
+    assert(strcmp(((ValueNode*)sm->values[0]->value)->content, "test_value_66")==0);
+    free(result);
+    free(((KeyNode*)sm->keys[0]->key)->content);
+    free(((KeyNode*)sm->keys[0]->key)->input_time);
+    free(((KeyNode*)sm->keys[0]->key));
+    free(sm->keys[0]);
+    free(sm->keys);
+    free(sm->values[0]->value);
+    free(sm->values[0]);
+    free(sm->values);
+}
+/*
+void test_execute_set_cmd_set_get() {
+    SimpleMap sm = {NULL, NULL, 10, 0};
+    BulkStringNode key_node = {{BULK_STR, NULL, NULL}, "test_key", 8};
+    GenericNode value_node = {{BULK_STR, NULL, NULL}};
+    GenericNode* parsed_cmd[6] = {NULL, NULL, NULL, NULL, (GenericNode*)&value_node, (GenericNode*)&key_node};
+
+    char* result = execute_set_cmd(SET_GET, parsed_cmd, &sm);
+
+    assert(result != NULL); // Ensure result is not NULL for SET_GET
+    assert(strcmp(result, "$-1\r\n") == 0); // Ensure the correct response message
+
+    free(result);
+}
+
+void test_execute_set_cmd_null_parsed_cmd() {
+    SimpleMap sm = {NULL, NULL, 10, 0};
+
+    char* result = execute_set_cmd(SET_BASIC, NULL, &sm);
+
+    assert(result == NULL); // Ensure NULL is returned for NULL parsed_cmd
+}
+
+void test_execute_set_cmd_null_sm() {
+    BulkStringNode key_node = {{BULK_STR, NULL, NULL}, "test_key", 8};
+    GenericNode value_node = {{BULK_STR, NULL, NULL}};
+    GenericNode* parsed_cmd[6] = {NULL, NULL, NULL, NULL, (GenericNode*)&value_node, (GenericNode*)&key_node};
+
+    char* result = execute_set_cmd(SET_BASIC, parsed_cmd, NULL);
+
+    assert(result == NULL); // Ensure NULL is returned for NULL sm
+}
+
+void test_execute_set_cmd_null_key_or_value() {
+    SimpleMap sm = {NULL, NULL, 10, 0};
+    GenericNode* parsed_cmd[6] = {NULL, NULL, NULL, NULL, NULL, NULL};
+
+    char* result = execute_set_cmd(SET_BASIC, parsed_cmd, &sm);
+
+    assert(result == NULL); // Ensure NULL is returned for NULL key or value
+}
+
+void test_execute_set_cmd_invalid_state() {
+    SimpleMap sm = {NULL, NULL, 10, 0};
+    BulkStringNode key_node = {{BULK_STR, NULL, NULL}, "test_key", 8};
+    GenericNode value_node = {{BULK_STR, NULL, NULL}};
+    GenericNode* parsed_cmd[6] = {NULL, NULL, NULL, NULL, (GenericNode*)&value_node, (GenericNode*)&key_node};
+
+    char* result = execute_set_cmd(0b00000000, parsed_cmd, &sm); // Invalid state
+
+    assert(result == NULL); // Ensure NULL is returned for invalid state
+}
+
+void test_execute_set_cmd_memory_allocation_failure() {
+    SimpleMap sm = {NULL, NULL, 10, 0};
+    BulkStringNode key_node = {{BULK_STR, NULL, NULL}, "test_key", 8};
+    GenericNode value_node = {{BULK_STR, NULL, NULL}};
+    GenericNode* parsed_cmd[6] = {NULL, NULL, NULL, NULL, (GenericNode*)&value_node, (GenericNode*)&key_node};
+
+    // Simulate memory allocation failure
+    char* result = execute_set_cmd(SET_BASIC, parsed_cmd, &sm);
+
+    assert(result == NULL); // Ensure NULL is returned for memory allocation failure
+}
+*/
+
+
 int main() {
     test_is_set_option_valid();
     test_handle_set_options_valid();
@@ -871,7 +1162,18 @@ int main() {
     test_execute_set_get_error_null_key();
     test_execute_set_get_sucess_null_content_value();
     test_execute_set_get_sucess_replace_null_content_value();
-    
+
+    // execute_set_basic
+    test_execute_set_basic_success_set();
+    test_execute_set_basic_success_upgrade();
+    test_execute_set_basic_null_inputs();
+    test_execute_set_basic_key_null_content();
+    test_execute_set_basic_empty_key();
+
+    // execute_set_cmd
+    test_execute_set_cmd_set_basic();
+    test_execute_set_cmd_set_get_no_previous_key();
+    test_execute_set_cmd_set_get_upgrade();
     puts("All tests passed");
     return 0;
 }
