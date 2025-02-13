@@ -207,7 +207,7 @@ execute_set_cmd(char state, GenericNode** parsed_cmd,  SimpleMap* sm){
         case SET_BASIC:
             return execute_set_basic(sm, kvp, key, value);
         case SET_GET:
-            return execute_set_get(sm, kvp, key, value);
+            return execute_set_get(sm, kvp);
         case SET_EX_PX_EXAL_PXAT:
         case SET_GET_EXPX:
         case SET_NXXX:
@@ -218,23 +218,57 @@ execute_set_cmd(char state, GenericNode** parsed_cmd,  SimpleMap* sm){
     }
     return NULL;
 }
+
+/**
+ * @brief Executes the Redis `SET <key> <value> GET` operation on a SimpleMap.
+ *
+ * @details This function performs the Redis-like `SET <key> <value> GET` command.  
+ *          It inserts or updates a key-value pair in the given `SimpleMap` and  
+ *          returns the previous value if the key already existed.
+ *
+ * @param sm  A pointer to the `SimpleMap` structure where the key-value pair  
+ *            will be stored.
+ * @param kvp A pointer to the `KeyValuePair` containing the key and value  
+ *            to be set in the map.
+ *
+ * @return A dynamically allocated string representing the previous value  
+ *         associated with the key in Redis RESP format, or `NULL` if the key  
+ *         was not present before. The caller is responsible for freeing  
+ *         this string.
+ *
+ * @note Memory Management:
+ *       - The `kvp` structure is always freed before the function returns.
+ *       - The `sm` structure remains unchanged.
+ *       - `kvp->key` and `kvp->value` are freed if:
+ *         - An error occurs during processing.
+ *         - The key already exists, and an update is performed.
+ *       - If a new key-value pair is inserted, ownership of `kvp->key` and  
+ *         `kvp->value` is transferred to the map, and they are not freed.
+ * @note Value content:
+ *       Its possible to pass a string value node with its content as a NULL string. 
+ *       In this case, the returned value will always be "$-1\r\n", no matter if 
+ *       it's the first time the key is inserted or if it was already present.
+ */
 char*
 execute_set_get(SimpleMap*    sm,
-                KeyValuePair* kvp,
-                KeyNode*      key,
-                ValueNode*    value){
-    if(!key || !value      || !kvp
+                KeyValuePair* kvp){
+    if(!kvp || !kvp->key || !kvp->value
             || !sm->values || !sm->keys){
-        clean_up_execute_set_cmd(key,value);
         if(kvp){
+            clean_up_execute_set_cmd(kvp->key,kvp->value);
             free(kvp);
         }
+        return NULL;
+    }
+    if(!((KeyNode*)kvp->key)->content){
+        clean_up_execute_set_cmd(kvp->key,kvp->value);
+        free(kvp);
         return NULL;
     }
     int rtn = set(sm,kvp,&compare);
     char *rtn_val = NULL, *rtn_msg = "$-1\r\n";
     if(rtn==ERROR_SET_SM_RTN){
-        clean_up_execute_set_cmd(key,value);
+        clean_up_execute_set_cmd(kvp->key,kvp->value);
         free(kvp);
         return rtn_val;
     }
@@ -260,10 +294,12 @@ execute_set_get(SimpleMap*    sm,
                 char content_size_buf[16] = {0};
                 int   content_size = old_value_s->size;
                 sprintf(content_size_buf, "%d", content_size);
-                int rtn_val_size = strlen(content_size_buf) + 2 + old_value_s->size + 3;
+                int rtn_val_size = 1 + strlen(content_size_buf) + 2 + old_value_s->size + 3;
                 rtn_val = (char*)calloc(rtn_val_size,sizeof(char));
                 int pos = 0;
-                memcpy(rtn_val,content_size_buf,strlen(content_size_buf));
+                memcpy(rtn_val,"$",1);
+                pos++;
+                memcpy(rtn_val+pos,content_size_buf,strlen(content_size_buf));
                 pos+=strlen(content_size_buf);
                 memcpy(rtn_val+pos,"\r\n",2);
                 pos+=2;

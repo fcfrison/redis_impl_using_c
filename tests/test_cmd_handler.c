@@ -671,13 +671,13 @@ void test_compare_null_input() {
 }
 
 
-void test_execute_set_get_success_set() {
-    SimpleMap* sm = create_simple_map();
-    KeyNode* key = create_key_node("test_key_1", 0, 0, strlen("test_key_1"));
-    ValueNode* value = create_value_node_string("value_key_1",BULK_STR,strlen("value_key_1"));
+void test_execute_set_get_success_set_new_item() {
+    SimpleMap* sm     = create_simple_map();
+    KeyNode* key      = create_key_node("test_key_1", 0, 0, strlen("test_key_1"));
+    ValueNode* value  = create_value_node_string("value_key_1",BULK_STR,strlen("value_key_1"));
     KeyValuePair* kvp = create_key_val_pair(key,value);
 
-    char* result = execute_set_get(sm, kvp, key, value);
+    char* result = execute_set_get(sm, kvp);
 
     assert(result != NULL); // Ensure result is not NULL for successful set
     assert(strcmp(result, "$-1\r\n") == 0); // Ensure the correct response message
@@ -691,6 +691,28 @@ void test_execute_set_get_success_set() {
     free(value);
     free(key);
 }
+// Key already exists
+void test_execute_set_get_success_upgrade() {
+    SimpleMap* sm       = create_simple_map();
+    KeyValuePair* kvp   = create_key_val_pair(
+                                    create_key_node("test_key_1", 0, 0, strlen("test_key_1")),
+                                    create_value_node_string("value_key_1",BULK_STR,strlen("value_key_1"))
+                                );
+    // Simulate success upgrade
+    char* result        = execute_set_get(sm, kvp);
+    KeyValuePair* kvp_1 = create_key_val_pair(
+                                    create_key_node("test_key_1", 0, 0, strlen("test_key_1")),
+                                    create_value_node_string("value_key_66",BULK_STR,strlen("value_key_66"))
+                                );
+    result              = execute_set_get(sm, kvp_1);
+    assert(result != NULL); // Ensure result is not NULL for successful upgrade
+    assert(strcmp(result, "$11\r\nvalue_key_1\r\n") == 0); // Ensure the correct response message
+    free(result);
+    // This is not the proper way to free memory, because in this way memory leak will occur
+    // but it's enough for tests
+    free(sm->keys[0]);
+    free(sm->values[0]);
+}
 
 void test_execute_set_get_error_values_arr_is_null() {
     // values array and 
@@ -701,33 +723,91 @@ void test_execute_set_get_error_values_arr_is_null() {
     ValueNode* value = create_value_node_string("value_key_1",BULK_STR,strlen("value_key_1"));
     KeyValuePair* kvp = create_key_val_pair(key,value);
     // Simulate set failure
-    char* result = execute_set_get(sm, kvp, key, value);
+    char* result = execute_set_get(sm, kvp);
 
     assert(result == NULL); // Ensure NULL is returned for set error
     free(sm->keys);
 }
-// Key already exists
-void test_execute_set_get_success_upgrade() {
-    SimpleMap sm = {NULL, NULL, 10, 0};
-    KeyNode key = {"test_key", NULL, 0, 0, 8};
-    ValueNode value = {NULL, BULK_STR};
-    KeyValuePair kvp = {&key, &value};
-
-    // Simulate success upgrade
-    char* result = execute_set_get(&sm, &kvp, &key, &value);
-
-    assert(result != NULL); // Ensure result is not NULL for successful upgrade
-    assert(strcmp(result, "$-1\r\n") == 0); // Ensure the correct response message
-
-    free(result);
-}
 
 void test_execute_set_get_null_inputs() {
-    char* result = execute_set_get(NULL, NULL, NULL, NULL);
+    char* result = execute_set_get(NULL, NULL);
 
     assert(result == NULL); // Ensure NULL is returned for NULL inputs
 }
+void test_execute_set_get_error_null_key() {
+    SimpleMap* sm       = create_simple_map();
+    KeyValuePair* kvp   = create_key_val_pair(
+                                    create_key_node("test_key_1", 0, 0, strlen("test_key_1")),
+                                    create_value_node_string("value_key_1",BULK_STR,strlen("value_key_1"))
+                                );
+    char* content = ((KeyNode*)kvp->key)->content;
+    ((KeyNode*)kvp->key)->content = NULL;
+    free(content);
+    // Simulate success upgrade
+    char* result        = execute_set_get(sm, kvp);
+    assert(result==NULL);
+    free(sm);
+}
 
+// It's possible to set null content values;
+void test_execute_set_get_sucess_null_content_value() {
+    SimpleMap* sm       = create_simple_map();
+    KeyValuePair* kvp   = create_key_val_pair(
+                                    create_key_node("test_key_1", 0, 0, strlen("test_key_1")),
+                                    create_value_node_string("value_key_1",BULK_STR,strlen("value_key_1"))
+                                );
+    char* content = ((ValueNode*)kvp->value)->content;
+    ((ValueNode*)kvp->value)->content = NULL;
+    free(content);
+    // Simulate success upgrade
+    char* result        = execute_set_get(sm, kvp);
+    assert(strcmp(result, "$-1\r\n") == 0); // Ensure the correct response message
+    assert(sm->keys[0]);
+    assert(sm->values[0]);
+    assert(((ValueNode*)sm->values[0]->value)->content == NULL);
+    free(result);
+    free(((KeyNode*)sm->keys[0]->key)->content);
+    free(((KeyNode*)sm->keys[0]->key)->input_time);
+    free(((KeyNode*)sm->keys[0]->key));
+    free(sm->keys[0]);
+    free(sm->keys);
+    free(sm->values[0]->value);
+    free(sm->values[0]);
+    free(sm->values);
+}
+void test_execute_set_get_sucess_replace_null_content_value() {
+    SimpleMap* sm       = create_simple_map();
+    KeyValuePair* kvp   = create_key_val_pair(
+                                    create_key_node("test_key_1", 0, 0, strlen("test_key_1")),
+                                    create_value_node_string("value_key_1",BULK_STR,strlen("value_key_1"))
+                                );
+    char* content = ((ValueNode*)kvp->value)->content;
+    ((ValueNode*)kvp->value)->content = NULL;
+    free(content);
+    // Simulate success upgrade
+    char* result = execute_set_get(sm, kvp);
+    KeyValuePair* kvp_1 = create_key_val_pair(
+        create_key_node("test_key_1", 0, 0, strlen("test_key_1")),
+        create_value_node_string("value_key_1",BULK_STR,strlen("value_key_1"))
+    );
+    
+    result = execute_set_get(sm, kvp_1);
+
+    assert(strcmp(result, "$-1\r\n") == 0); // Ensure the correct response message
+  
+    assert(sm->keys[0]);
+    assert(sm->values[0]);
+    assert(strcmp(((ValueNode*)sm->values[0]->value)->content,"value_key_1")==0);  
+    free(result);
+    free(((KeyNode*)sm->keys[0]->key)->content);
+    free(((KeyNode*)sm->keys[0]->key)->input_time);
+    free(((KeyNode*)sm->keys[0]->key));
+    free(sm->keys[0]);
+    free(sm->keys);
+    free(sm->values[0]->value);
+    free(sm->values[0]);
+    free(sm->values);
+}
 int main() {
     test_is_set_option_valid();
     test_handle_set_options_valid();
@@ -783,11 +863,15 @@ int main() {
     test_compare_different_sizes();
     test_compare_different_content();
     test_compare_null_input();
-    puts("All tests passed");
-
-
-    test_execute_set_get_success_set();
+    // execute_set_get
+    test_execute_set_get_success_set_new_item();
+    test_execute_set_get_success_upgrade();
     test_execute_set_get_error_values_arr_is_null();
     test_execute_set_get_null_inputs();
+    test_execute_set_get_error_null_key();
+    test_execute_set_get_sucess_null_content_value();
+    test_execute_set_get_sucess_replace_null_content_value();
+    
+    puts("All tests passed");
     return 0;
 }
