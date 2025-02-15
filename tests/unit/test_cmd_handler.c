@@ -897,6 +897,7 @@ void test_execute_set_basic_empty_key() {
     free(sm->keys);
     free(sm->values);
     free(sm);
+    return;
 }
 
 // execute_set_cmd
@@ -936,6 +937,7 @@ void test_execute_set_cmd_set_basic() {
     free(sm->values[0]->value);
     free(sm->values[0]);
     free(sm->values);
+    return;
 }
 
 void test_execute_set_cmd_set_get_no_previous_key() {
@@ -974,6 +976,7 @@ void test_execute_set_cmd_set_get_no_previous_key() {
     free(sm->values[0]->value);
     free(sm->values[0]);
     free(sm->values);
+    return;
 }
 void test_execute_set_cmd_set_get_upgrade() {
     SimpleMap* sm = create_simple_map();
@@ -1031,20 +1034,7 @@ void test_execute_set_cmd_set_get_upgrade() {
     free(sm->values[0]->value);
     free(sm->values[0]);
     free(sm->values);
-}
-/*
-void test_execute_set_cmd_set_get() {
-    SimpleMap sm = {NULL, NULL, 10, 0};
-    BulkStringNode key_node = {{BULK_STR, NULL, NULL}, "test_key", 8};
-    GenericNode value_node = {{BULK_STR, NULL, NULL}};
-    GenericNode* parsed_cmd[6] = {NULL, NULL, NULL, NULL, (GenericNode*)&value_node, (GenericNode*)&key_node};
-
-    char* result = execute_set_cmd(SET_GET, parsed_cmd, &sm);
-
-    assert(result != NULL); // Ensure result is not NULL for SET_GET
-    assert(strcmp(result, "$-1\r\n") == 0); // Ensure the correct response message
-
-    free(result);
+    return;
 }
 
 void test_execute_set_cmd_null_parsed_cmd() {
@@ -1054,17 +1044,16 @@ void test_execute_set_cmd_null_parsed_cmd() {
 
     assert(result == NULL); // Ensure NULL is returned for NULL parsed_cmd
 }
-
 void test_execute_set_cmd_null_sm() {
-    BulkStringNode key_node = {{BULK_STR, NULL, NULL}, "test_key", 8};
-    GenericNode value_node = {{BULK_STR, NULL, NULL}};
+    BaseNode base_node = {BULK_STR, NULL, NULL};
+    BulkStringNode key_node = {&base_node, "test_key", 8};
+    GenericNode value_node = {&base_node};
     GenericNode* parsed_cmd[6] = {NULL, NULL, NULL, NULL, (GenericNode*)&value_node, (GenericNode*)&key_node};
 
     char* result = execute_set_cmd(SET_BASIC, parsed_cmd, NULL);
 
     assert(result == NULL); // Ensure NULL is returned for NULL sm
 }
-
 void test_execute_set_cmd_null_key_or_value() {
     SimpleMap sm = {NULL, NULL, 10, 0};
     GenericNode* parsed_cmd[6] = {NULL, NULL, NULL, NULL, NULL, NULL};
@@ -1074,29 +1063,6 @@ void test_execute_set_cmd_null_key_or_value() {
     assert(result == NULL); // Ensure NULL is returned for NULL key or value
 }
 
-void test_execute_set_cmd_invalid_state() {
-    SimpleMap sm = {NULL, NULL, 10, 0};
-    BulkStringNode key_node = {{BULK_STR, NULL, NULL}, "test_key", 8};
-    GenericNode value_node = {{BULK_STR, NULL, NULL}};
-    GenericNode* parsed_cmd[6] = {NULL, NULL, NULL, NULL, (GenericNode*)&value_node, (GenericNode*)&key_node};
-
-    char* result = execute_set_cmd(0b00000000, parsed_cmd, &sm); // Invalid state
-
-    assert(result == NULL); // Ensure NULL is returned for invalid state
-}
-
-void test_execute_set_cmd_memory_allocation_failure() {
-    SimpleMap sm = {NULL, NULL, 10, 0};
-    BulkStringNode key_node = {{BULK_STR, NULL, NULL}, "test_key", 8};
-    GenericNode value_node = {{BULK_STR, NULL, NULL}};
-    GenericNode* parsed_cmd[6] = {NULL, NULL, NULL, NULL, (GenericNode*)&value_node, (GenericNode*)&key_node};
-
-    // Simulate memory allocation failure
-    char* result = execute_set_cmd(SET_BASIC, parsed_cmd, &sm);
-
-    assert(result == NULL); // Ensure NULL is returned for memory allocation failure
-}
-*/
 
 
 int main() {
@@ -1174,6 +1140,9 @@ int main() {
     test_execute_set_cmd_set_basic();
     test_execute_set_cmd_set_get_no_previous_key();
     test_execute_set_cmd_set_get_upgrade();
+    test_execute_set_cmd_null_parsed_cmd();
+    test_execute_set_cmd_null_sm();
+    test_execute_set_cmd_null_key_or_value();
     puts("All tests passed");
     return 0;
 }

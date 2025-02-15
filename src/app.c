@@ -20,10 +20,11 @@ app_code(void* arg){
     int* fd_ptr = (int*)arg;
     int  fd     = *fd_ptr;
     int  rtn_v;
-    char buff, *rtn_s;
+    char buff, *rtn_s, *msg;
 
     ssize_t rtn;
     while(1){
+        rtn_s = NULL;
         rtn = recv_resp_fm_clnt(&buff, 1, fd, 3, .500);
         if(rtn==-1){
             printf("Invalid data received: %s...\n", strerror(errno));
@@ -36,13 +37,21 @@ app_code(void* arg){
             case '*':
                 ArrayNode* array = parse_array(fd);
                 if(!array){
-                    char* msg = "An error occured while parsing the command.";
+                   msg = "An error occured while parsing the command.";
                     send_resp_to_clnt(msg,strlen(msg)+1, fd,3,500);
                     return NULL;
                 }
                 if(array){
-                    //print_array(array,0);
+                    print_array(array,0);
                     rtn_s = parse_command(array, sm);
+                }
+                if(!rtn_s){
+                    msg = "An error occured while parsing the command.";
+                    rtn_v = send_resp_to_clnt(msg,strlen(msg)+1, fd,3,500);
+                    if(rtn_v==-1){
+                        continue;
+                    }
+                    delete_array(array,1);
                 }
                 if(array && rtn_s){
                     rtn_v = send_resp_to_clnt(rtn_s,strlen(rtn_s)+1, fd,3,500);
@@ -63,5 +72,5 @@ app_code(void* arg){
 }
 int main(){
     sm = create_simple_map();
-    start_server(&app_code, 10, 5, 2, 10);
+    start_server(&app_code, 10, 500, 2, 500);
 }

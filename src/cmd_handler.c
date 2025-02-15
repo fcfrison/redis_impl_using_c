@@ -9,7 +9,7 @@
 #define MAX_BYTES_ARR_SIZE 20 
 #define MAX_BYTES_BULK_STR 9
 
-
+void* __execute_set_check(SimpleMap* sm, KeyValuePair* kvp);
 
 
 
@@ -99,9 +99,11 @@ handle_set_cmd(void* node, SimpleMap* sm){
         }
         return NULL;
     }
-    return execute_set_cmd(state, parsed_cmd,  sm);
-    // Next step is decide what to do, based on the current state
-    // remember that parsed_cmd must be freed;
+    char* rtn = execute_set_cmd(state, parsed_cmd,  sm);
+    if(parsed_cmd){
+        free(parsed_cmd);
+    }
+    return rtn;
 }
 
 
@@ -208,15 +210,99 @@ execute_set_cmd(char state, GenericNode** parsed_cmd,  SimpleMap* sm){
             return execute_set_basic(sm, kvp);
         case SET_GET:
             return execute_set_get(sm, kvp);
+        case SET_NXXX:
+            return execute_set_nx_xx(sm, kvp, parsed_cmd);
         case SET_EX_PX_EXAL_PXAT:
         case SET_GET_EXPX:
-        case SET_NXXX:
         case SET_NXXX_EXPX:
         case SET_NXXX_GET:
         default:
             break;
     }
     return NULL;
+}
+char*
+execute_set_nx_xx(SimpleMap* sm, KeyValuePair* kvp, GenericNode** parsed_cmd){
+    
+    if(!__execute_set_check(sm,kvp) || !parsed_cmd || !parsed_cmd[3]){
+        return NULL;
+    }
+    //NX -- Only set the key if it does not already exist.
+    //XX -- Only set the key if it already exists.
+    BulkStringNode* nx_xx = (BulkStringNode*)parsed_cmd[3];
+    char* rtn_val = NULL, *option = nx_xx->content;
+    char* nil = "$-1\r\n", *sucess="+OK\r\n";
+    if(!option){
+        return NULL;
+    }
+    unsigned char option_val = 0;
+    if(strcmp(option,"NX")==0){
+        option_val = 1;
+    }else if(strcmp(option,"XX")==0){
+        option_val = 2;
+    }else{
+        return NULL;
+    }
+    KeyValuePair* old_kvp = get(sm,kvp->key,&compare);
+    // if not old_kvp --> new_key
+    // if old_kvp --> already exists
+    switch (option_val){
+        case 1://NX
+            if(!old_kvp){//chave nao existe e NX
+                switch (set(sm,kvp,&compare)){
+                    case SUCESS_SET:
+                        rtn_val = (char*)calloc(strlen(sucess)+1,sizeof(char));
+                        strcpy(rtn_val,sucess);
+                        break;
+                    default:
+                        rtn_val = (char*)calloc(strlen(nil)+1,sizeof(char));
+                        strcpy(rtn_val,nil);
+                        break;
+                    }
+                
+            }else{
+                rtn_val = (char*)calloc(strlen(nil)+1,sizeof(char));
+                strcpy(rtn_val,nil);
+            }
+            break;
+        case 2: //XX -- Only set the key if it already exists.
+            if(old_kvp){
+                switch (set(sm,kvp,&compare)){
+                    case SUCESS_UPGRADE:
+                        rtn_val = (char*)calloc(strlen(sucess)+1,sizeof(char));
+                        strcpy(rtn_val,sucess);
+                        clean_up_execute_set_cmd(kvp->key,kvp->value);
+                        break;
+                    default:
+                        rtn_val = (char*)calloc(strlen(nil)+1,sizeof(char));
+                        strcpy(rtn_val,nil);
+                        break;
+                    }
+            }else{
+                rtn_val = (char*)calloc(strlen(nil)+1,sizeof(char));
+                strcpy(rtn_val,nil);
+            }
+            break;
+    }
+    free(kvp);
+    return rtn_val;
+}
+
+void* __execute_set_check(SimpleMap* sm, KeyValuePair* kvp){
+    if(!kvp || !kvp->key || !kvp->value
+        || !sm->values || !sm->keys){
+        if(kvp){
+            clean_up_execute_set_cmd(kvp->key,kvp->value);
+            free(kvp);
+        }
+    return NULL;
+    }
+    if(!((KeyNode*)kvp->key)->content){
+        clean_up_execute_set_cmd(kvp->key,kvp->value);
+        free(kvp);
+        return NULL;
+    }
+    return sm;
 }
 
 /**
@@ -252,17 +338,7 @@ execute_set_cmd(char state, GenericNode** parsed_cmd,  SimpleMap* sm){
 char*
 execute_set_get(SimpleMap*    sm,
                 KeyValuePair* kvp){
-    if(!kvp || !kvp->key || !kvp->value
-            || !sm->values || !sm->keys){
-        if(kvp){
-            clean_up_execute_set_cmd(kvp->key,kvp->value);
-            free(kvp);
-        }
-        return NULL;
-    }
-    if(!((KeyNode*)kvp->key)->content){
-        clean_up_execute_set_cmd(kvp->key,kvp->value);
-        free(kvp);
+    if(!__execute_set_check(sm, kvp)){
         return NULL;
     }
     int rtn = set(sm,kvp,&compare);
