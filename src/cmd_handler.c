@@ -233,6 +233,8 @@ execute_set_nx_xx(SimpleMap* sm, KeyValuePair* kvp, GenericNode** parsed_cmd){
     char* rtn_val = NULL, *option = nx_xx->content;
     char* nil = "$-1\r\n", *sucess="+OK\r\n";
     if(!option){
+        clean_up_execute_set_cmd(kvp->key,kvp->value);
+        free(kvp);
         return NULL;
     }
     unsigned char option_val = 0;
@@ -241,6 +243,8 @@ execute_set_nx_xx(SimpleMap* sm, KeyValuePair* kvp, GenericNode** parsed_cmd){
     }else if(strcmp(option,"XX")==0){
         option_val = 2;
     }else{
+        clean_up_execute_set_cmd(kvp->key,kvp->value);
+        free(kvp);
         return NULL;
     }
     KeyValuePair* old_kvp = get(sm,kvp->key,&compare);

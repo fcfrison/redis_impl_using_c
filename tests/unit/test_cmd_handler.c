@@ -1063,6 +1063,197 @@ void test_execute_set_cmd_null_key_or_value() {
     assert(result == NULL); // Ensure NULL is returned for NULL key or value
 }
 
+void test_execute_set_nx_xx_nx_success() {
+    SimpleMap* sm            = create_simple_map();
+    KeyNode* key             = create_key_node("test_key_1", 0, 0, strlen("test_key_1"));
+    ValueNode* value         = create_value_node_string("value_key_1",BULK_STR,strlen("value_key_1"));
+    KeyValuePair* kvp        = create_key_val_pair(key,value);
+    GenericNode** parsed_cmd = (GenericNode**)calloc(6,sizeof(GenericNode*));
+    BulkStringNode* nx_node = (BulkStringNode*)calloc(1, sizeof(BulkStringNode));
+    BaseNode* bn = (BaseNode*)calloc(1, sizeof(BaseNode));
+    bn->next = bn->prev = NULL;
+    bn->type = BULK_STR;
+    nx_node->content = (char*)malloc(sizeof(char)*strlen("NX"));
+    strcpy(nx_node->content,"NX");
+    nx_node->size = (int)strlen("NX");
+    nx_node->node = bn;
+    parsed_cmd[3] = (GenericNode*)nx_node;
+    char* result = execute_set_nx_xx(sm, kvp, parsed_cmd);
+
+    assert(result != NULL); // Ensure result is not NULL for NX success
+    assert(strcmp(result, "+OK\r\n") == 0); // Ensure the correct response message
+    assert(strcmp(((KeyNode*)sm->keys[0]->key)->content, "test_key_1")==0);
+    assert(strcmp(((ValueNode*)sm->values[0]->value)->content, "value_key_1")==0);
+    free(result);
+    free(((KeyNode*)sm->keys[0]->key)->content);
+    free(((KeyNode*)sm->keys[0]->key)->input_time);
+    free(((KeyNode*)sm->keys[0]->key));
+    free(sm->keys[0]);
+    free(sm->keys);
+    free(sm->values[0]->value);
+    free(sm->values[0]);
+    free(sm->values);
+    free(nx_node->content);
+    free(nx_node->node);
+    free(nx_node);
+}
+
+void test_execute_set_nx_xx_nx_failure() {
+    SimpleMap* sm            = create_simple_map();
+    KeyNode* key             = create_key_node("test_key_1", 0, 0, strlen("test_key_1"));
+    ValueNode* value         = create_value_node_string("value_key_1",BULK_STR,strlen("value_key_1"));
+    KeyValuePair* kvp        = create_key_val_pair(key,value);
+    GenericNode** parsed_cmd = (GenericNode**)calloc(6,sizeof(GenericNode*));
+    BulkStringNode* nx_node = (BulkStringNode*)calloc(1, sizeof(BulkStringNode));
+    BaseNode* bn = (BaseNode*)calloc(1, sizeof(BaseNode));
+    bn->next = bn->prev = NULL;
+    bn->type = BULK_STR;
+    nx_node->content = (char*)malloc(sizeof(char)*strlen("NX"));
+    strcpy(nx_node->content,"NX");
+    nx_node->size = (int)strlen("NX");
+    nx_node->node = bn;
+    parsed_cmd[3] = (GenericNode*)nx_node;
+    char* result = execute_set_nx_xx(sm, kvp, parsed_cmd);
+    // create the same item
+    kvp = create_key_val_pair(key,value);
+    result = execute_set_nx_xx(sm, kvp, parsed_cmd);
+    assert(result != NULL); // Ensure result is not NULL for NX success
+    assert(strcmp(result, "$-1\r\n") == 0); // Ensure the correct response message
+    assert(strcmp(((KeyNode*)sm->keys[0]->key)->content, "test_key_1")==0);
+    assert(strcmp(((ValueNode*)sm->values[0]->value)->content, "value_key_1")==0);
+    free(((KeyNode*)sm->keys[0]->key)->content);
+    free(((KeyNode*)sm->keys[0]->key)->input_time);
+    free(((KeyNode*)sm->keys[0]->key));
+    free(sm->keys[0]);
+    free(sm->keys);
+    free(sm->values[0]->value);
+    free(sm->values[0]);
+    free(sm->values);
+    free(nx_node->content);
+    free(nx_node->node);
+    free(nx_node);
+    free(result);
+}
+
+void test_execute_set_nx_xx_xx_success() {
+    //XX -- Only set the key if it already exists.
+
+    SimpleMap* sm            = create_simple_map();
+    KeyNode* key             = create_key_node("test_key_1", 0, 0, strlen("test_key_1"));
+    ValueNode* value         = create_value_node_string("value_key_1",BULK_STR,strlen("value_key_1"));
+    KeyValuePair* kvp        = create_key_val_pair(key,value);
+    GenericNode** parsed_cmd = (GenericNode**)calloc(6,sizeof(GenericNode*));
+    BulkStringNode* nx_node = (BulkStringNode*)calloc(1, sizeof(BulkStringNode));
+    BaseNode* bn = (BaseNode*)calloc(1, sizeof(BaseNode));
+    bn->next = bn->prev = NULL;
+    bn->type = BULK_STR;
+    nx_node->content = (char*)malloc(sizeof(char)*strlen("XX"));
+    strcpy(nx_node->content,"XX");
+    nx_node->size = (int)strlen("XX");
+    nx_node->node = bn;
+    parsed_cmd[3] = (GenericNode*)nx_node;
+    char* result = execute_set_basic(sm, kvp);
+    KeyNode* key_1             = create_key_node("test_key_1", 0, 0, strlen("test_key_1"));
+    ValueNode* value_1         = create_value_node_string("value_key_11",BULK_STR,strlen("value_key_11"));
+    KeyValuePair* kvp_1        = create_key_val_pair(key_1,value_1);
+    kvp = create_key_val_pair(key_1,value_1);
+    result = execute_set_nx_xx(sm, kvp_1, parsed_cmd);
+    assert(result != NULL); // Ensure result is not NULL for NX success
+    assert(strcmp(result, "+OK\r\n") == 0); // Ensure the correct response message
+    assert(strcmp(((KeyNode*)sm->keys[0]->key)->content, "test_key_1")==0);
+    assert(strcmp(((ValueNode*)sm->values[0]->value)->content, "value_key_11")==0);
+    free(((KeyNode*)sm->keys[0]->key)->content);
+    free(((KeyNode*)sm->keys[0]->key)->input_time);
+    free(((KeyNode*)sm->keys[0]->key));
+    free(sm->keys[0]);
+    free(sm->keys);
+    free(sm->values[0]->value);
+    free(sm->values[0]);
+    free(sm->values);
+    free(nx_node->content);
+    free(nx_node->node);
+    free(nx_node);
+    free(result);
+    return;
+}
+
+void test_execute_set_nx_xx_xx_failure() {
+    SimpleMap* sm            = create_simple_map();
+    KeyNode* key             = create_key_node("test_key_1", 0, 0, strlen("test_key_1"));
+    ValueNode* value         = create_value_node_string("value_key_1",BULK_STR,strlen("value_key_1"));
+    KeyValuePair* kvp        = create_key_val_pair(key,value);
+    GenericNode** parsed_cmd = (GenericNode**)calloc(6,sizeof(GenericNode*));
+    BulkStringNode* nx_node = (BulkStringNode*)calloc(1, sizeof(BulkStringNode));
+    BaseNode* bn = (BaseNode*)calloc(1, sizeof(BaseNode));
+    bn->next = bn->prev = NULL;
+    bn->type = BULK_STR;
+    nx_node->content = (char*)malloc(sizeof(char)*strlen("XX"));
+    strcpy(nx_node->content,"XX");
+    nx_node->size = (int)strlen("XX");
+    nx_node->node = bn;
+    parsed_cmd[3] = (GenericNode*)nx_node;
+    char* result = execute_set_nx_xx(sm, kvp, parsed_cmd);
+    assert(result != NULL); // Ensure result is not NULL for NX success
+    assert(strcmp(result, "$-1\r\n") == 0); // Ensure the correct response message
+    free(sm->keys);
+    free(sm->values);
+    free(nx_node->content);
+    free(nx_node->node);
+    free(nx_node);
+    free(key);
+    free(value);
+    free(result);
+}
+
+void test_execute_set_nx_xx_invalid_option() {
+    SimpleMap* sm            = create_simple_map();
+    KeyNode* key             = create_key_node("test_key_1", 0, 0, strlen("test_key_1"));
+    ValueNode* value         = create_value_node_string("value_key_1",BULK_STR,strlen("value_key_1"));
+    KeyValuePair* kvp        = create_key_val_pair(key,value);
+    GenericNode** parsed_cmd = (GenericNode**)calloc(6,sizeof(GenericNode*));
+    BulkStringNode* nx_node = (BulkStringNode*)calloc(1, sizeof(BulkStringNode));
+    BaseNode* bn = (BaseNode*)calloc(1, sizeof(BaseNode));
+    bn->next = bn->prev = NULL;
+    bn->type = BULK_STR;
+    nx_node->content = (char*)malloc(sizeof(char)*strlen("INVALID"));
+    strcpy(nx_node->content,"INVALID");
+    nx_node->size = (int)strlen("INVALID");
+    nx_node->node = bn;
+    parsed_cmd[3] = (GenericNode*)nx_node;
+    char* result = execute_set_nx_xx(sm, kvp, parsed_cmd);
+    assert(result == NULL); // Ensure NULL is returned for invalid option
+    free(sm->keys);
+    free(sm->values);
+    free(nx_node->content);
+    free(nx_node->node);
+    free(nx_node);
+    free(result);
+}
+void test_execute_set_nx_xx_null_parsed_cmd() {
+    SimpleMap* sm            = create_simple_map();
+    KeyNode* key             = create_key_node("test_key_1", 0, 0, strlen("test_key_1"));
+    ValueNode* value         = create_value_node_string("value_key_1",BULK_STR,strlen("value_key_1"));
+    KeyValuePair* kvp        = create_key_val_pair(key,value);
+    char* result = execute_set_nx_xx(sm, kvp, NULL);
+    assert(result == NULL); // Ensure NULL is returned for NULL parsed_cmd
+    free(sm->keys);
+    free(sm->values);
+    free(sm);
+}
+void test_execute_set_nx_xx_null_option() {
+    SimpleMap* sm            = create_simple_map();
+    KeyNode* key             = create_key_node("test_key_1", 0, 0, strlen("test_key_1"));
+    ValueNode* value         = create_value_node_string("value_key_1",BULK_STR,strlen("value_key_1"));
+    KeyValuePair* kvp        = create_key_val_pair(key,value);
+    GenericNode* parsed_cmd[6] = {NULL, NULL, NULL, NULL, NULL, NULL};
+    char* result = execute_set_nx_xx(sm, kvp, parsed_cmd);
+
+    assert(result == NULL); // Ensure NULL is returned for NULL option
+    free(sm->keys);
+    free(sm->values);
+    free(sm);
+}
+
 
 
 int main() {
@@ -1143,6 +1334,15 @@ int main() {
     test_execute_set_cmd_null_parsed_cmd();
     test_execute_set_cmd_null_sm();
     test_execute_set_cmd_null_key_or_value();
+    
+    // execute_set_nx_xx
+    test_execute_set_nx_xx_nx_success();
+    test_execute_set_nx_xx_nx_failure();
+    test_execute_set_nx_xx_xx_success();
+    test_execute_set_nx_xx_xx_failure();
+    test_execute_set_nx_xx_invalid_option();
+    test_execute_set_nx_xx_null_parsed_cmd();
+    test_execute_set_nx_xx_null_option();
     puts("All tests passed");
     return 0;
 }
