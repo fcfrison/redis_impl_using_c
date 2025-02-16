@@ -65,6 +65,8 @@ void test_set_basic_command() {
     close(sock);
 }
 
+//NX -- Only set the key if it does not already exist.
+//XX -- Only set the key if it already exists.
 void test_set_command_with_nx_option() {
     int sock;
     struct sockaddr_in serv_addr;
@@ -91,7 +93,7 @@ void test_set_command_with_nx_option() {
     }
 
     // Send SET command with NX option
-    const char* set_nx_command = "*4\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n$2\r\nNX\r\n";
+    const char* set_nx_command = "*4\r\n$3\r\nSET\r\n$7\r\nnew_key\r\n$5\r\nvalue\r\n$2\r\nNX\r\n";
     send_command(sock, set_nx_command);
 
     // Receive response
@@ -146,7 +148,7 @@ void test_set_command_with_ex_option() {
 }
 
 int main() {
-    //test_set_basic_command();
+    test_set_basic_command();
     test_set_command_with_nx_option();
     //test_set_command_with_ex_option();
 
