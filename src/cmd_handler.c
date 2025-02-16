@@ -11,7 +11,7 @@
 
 void* __execute_set_check(SimpleMap* sm, KeyValuePair* kvp);
 
-
+void cpy_str(const char* src, const size_t str_len, char** dest);
 
 char*
 parse_command(void* node, SimpleMap* sm){
@@ -212,15 +212,112 @@ execute_set_cmd(char state, GenericNode** parsed_cmd,  SimpleMap* sm){
             return execute_set_get(sm, kvp);
         case SET_NXXX:
             return execute_set_nx_xx(sm, kvp, parsed_cmd);
+        case SET_NXXX_GET:
+            return execute_set_nxxx_get(sm, kvp, parsed_cmd);
         case SET_EX_PX_EXAL_PXAT:
         case SET_GET_EXPX:
         case SET_NXXX_EXPX:
-        case SET_NXXX_GET:
         default:
             break;
     }
     return NULL;
 }
+
+/**
+ * Executes a Redis SET command with both NX|XX and GET options.
+ *
+ * This function implements the behavior of SET key value [NX|XX] GET in Redis:
+ * - With NX GET: If key doesn't exist, sets the value and returns nil.
+ *               If key exists, doesn't set the value and returns the current value.
+ * - With XX GET: If key exists, sets the new value and returns the old value.
+ *               If key doesn't exist, doesn't set anything and returns nil.
+ *
+ * The function returns a dynamically allocated string in RESP protocol format:
+ * - If there was an old value, returns it as a bulk string: "$<length>\r\n<value>\r\n"
+ * - If there was no old value or operation failed, returns nil as: "$-1\r\n"
+ *
+ * @param sm           Pointer to the SimpleMap data structure storing key-value pairs
+ * @param kvp          Pointer to the KeyValuePair to be set
+ * @param parsed_cmd   Array of GenericNode pointers representing the parsed command
+ *                     parsed_cmd[2] and parsed_cmd[3] must contain the NX|XX and GET options
+ *
+ * @return A dynamically allocated string containing the RESP-formatted old value
+ *         or nil, or NULL in the following error cases:
+ *         - If __execute_set_check() fails
+ *         - If parsed_cmd, parsed_cmd[2] or parsed_cmd[3] are NULL
+ *         - If kvp_old exists but has invalid structure (NULL key/value/content)
+ *         The caller is responsible for freeing the returned memory when not NULL.
+ */
+char*
+execute_set_nxxx_get(SimpleMap* sm, KeyValuePair* kvp, GenericNode** parsed_cmd){
+    if(!__execute_set_check(sm, kvp)){
+        return NULL;
+    }
+    if(!parsed_cmd || !parsed_cmd[3]){
+        clean_up_execute_set_cmd(kvp->key,kvp->value);
+        free(kvp);
+        return NULL;
+    }
+    KeyValuePair* kvp_old = get(sm,kvp->key,&compare);
+    char* nil = "$-1\r\n", *rtn_val = NULL;
+    if(kvp_old){
+        if(!kvp_old->key || !kvp_old->value ||
+           !((KeyNode*)kvp_old->key)->content){
+            clean_up_execute_set_cmd(kvp->key,kvp->value);
+            free(kvp);
+            return NULL;
+        }
+        ValueNode* old_value = (ValueNode*)kvp_old->value;
+        switch (old_value->dtype){
+            case BULK_STR:
+                ValueNodeString* old_value_s = (ValueNodeString*)old_value;
+                if(old_value_s->content){
+                    char content_size_buf[16] = {0};
+                    int   content_size = old_value_s->size;
+                    sprintf(content_size_buf, "%d", content_size);
+                    int rtn_val_size = 1 + strlen(content_size_buf) + 2 + old_value_s->size + 3;
+                    rtn_val = (char*)calloc(rtn_val_size,sizeof(char));
+                    int pos = 0;
+                    memcpy(rtn_val,"$",1);
+                    pos++;
+                    memcpy(rtn_val+pos,content_size_buf,strlen(content_size_buf));
+                    pos+=strlen(content_size_buf);
+                    memcpy(rtn_val+pos,"\r\n",2);
+                    pos+=2;
+                    memcpy(rtn_val+pos,old_value_s->content,old_value_s->size);
+                    pos+=old_value_s->size;
+                    memcpy(rtn_val+pos,"\r\n",2);
+                    pos+=2;
+                    rtn_val[pos] = '\0';
+                    break;                   
+                }else{
+                    cpy_str(nil,strlen(nil), &rtn_val);
+                    break;
+                }
+            default:
+                cpy_str(nil,strlen(nil), &rtn_val);
+                break;
+        }
+    }else{
+        cpy_str(nil,strlen(nil), &rtn_val);
+    }
+    char* rtn = execute_set_nx_xx(sm, kvp, parsed_cmd);
+    if(rtn){
+        free(rtn);
+        return rtn_val;
+    }
+    free(rtn_val);
+    cpy_str(nil,strlen(nil), &rtn_val);
+    return rtn_val;
+};
+
+void
+cpy_str(const char* src, const size_t str_len, char** dest){
+    *dest = (char*)calloc(str_len+1,sizeof(char));
+    strcpy(*dest,src);
+    return;
+};
+
 char*
 execute_set_nx_xx(SimpleMap* sm, KeyValuePair* kvp, GenericNode** parsed_cmd){
     

@@ -72,5 +72,5 @@ app_code(void* arg){
 }
 int main(){
     sm = create_simple_map();
-    start_server(&app_code, 10, 500, 2, 500);
+    start_server(&app_code, 10, 500, 2, 0);
 }

@@ -51,4 +51,5 @@ char*         execute_set_get(SimpleMap* sm, KeyValuePair* kvp);
 char*         execute_set_basic(SimpleMap* sm, KeyValuePair* kvp);
 void          handle_set_options(char* state, GenericNode** parsed_cmd, GenericNode** gnode, char bit_pos);
 char*         execute_set_nx_xx(SimpleMap* sm, KeyValuePair* kvp, GenericNode** parsed_cmd);
+char*         execute_set_nxxx_get(SimpleMap* sm, KeyValuePair* kvp, GenericNode** parsed_cmd);
 #endif 
