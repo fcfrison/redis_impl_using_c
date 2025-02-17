@@ -307,8 +307,7 @@ execute_set_nxxx_get(SimpleMap* sm, KeyValuePair* kvp, GenericNode** parsed_cmd)
         return rtn_val;
     }
     free(rtn_val);
-    cpy_str(nil,strlen(nil), &rtn_val);
-    return rtn_val;
+    return NULL;
 };
 
 void
@@ -364,6 +363,8 @@ execute_set_nx_xx(SimpleMap* sm, KeyValuePair* kvp, GenericNode** parsed_cmd){
             }else{
                 rtn_val = (char*)calloc(strlen(nil)+1,sizeof(char));
                 strcpy(rtn_val,nil);
+                clean_up_execute_set_cmd(kvp->key,kvp->value);
+
             }
             break;
         case 2: //XX -- Only set the key if it already exists.
@@ -382,6 +383,7 @@ execute_set_nx_xx(SimpleMap* sm, KeyValuePair* kvp, GenericNode** parsed_cmd){
             }else{
                 rtn_val = (char*)calloc(strlen(nil)+1,sizeof(char));
                 strcpy(rtn_val,nil);
+                clean_up_execute_set_cmd(kvp->key,kvp->value);
             }
             break;
     }
