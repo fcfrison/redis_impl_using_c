@@ -9,32 +9,86 @@
 #define MAX_BYTES_ARR_SIZE 20 
 #define MAX_BYTES_BULK_STR 9
 
+// Prototypes
 void* __execute_set_check(SimpleMap* sm, KeyValuePair* kvp);
-
 void cpy_str(const char* src, const size_t str_len, char** dest);
+char* from_val_nd_str_to_str(const ValueNodeString* src, char** rtn_val);
+
 
 char*
 parse_command(void* node, SimpleMap* sm){
     GenericNode* gnode = (GenericNode*) node;
+    unsigned char first_array = 0;
     while(gnode){
         switch (gnode->node->type){
             case ARRAY:
                 gnode = ((ArrayNode*) gnode)->content;
+                first_array++;
                 break;
             case BULK_STR:
                 BulkStringNode* temp = (BulkStringNode*) gnode;
-                if(!strcmp(temp->content,"ECHO")){
+                if(!strcmp(temp->content,"ECHO") && first_array==1){
                     return handle_echo_cmd(temp->node->next);
-                }else if(!strcmp(temp->content,"SET")){
+                }else if(!strcmp(temp->content,"SET") && first_array==1){
                     return handle_set_cmd(temp->node->next,sm);
-                }
-                return NULL;
+                }else if(!strcmp(temp->content,"GET") && first_array==1){
+                    return handle_get_cmd(temp->node->next,sm);
+                }return NULL;
             default:
                 return NULL;
         }
     }
     return NULL;
 }
+
+char*
+handle_get_cmd(void* gnode, SimpleMap* sm){
+    if(!is_get_cmd_valid(gnode)){
+        return NULL;
+    }
+    char* rtn = NULL, *nil="$-1\r\n";
+    BulkStringNode* blk_s_nd = (BulkStringNode*)gnode;
+    KeyNode* key = create_key_node(blk_s_nd->content, 0, 0, blk_s_nd->size);
+    if(!key){
+        return NULL;
+    }
+    KeyValuePair* kvp = get(sm, key, &compare);
+    if(!kvp){
+        rtn = (char*)calloc(strlen(nil)+1,sizeof(char));
+        strcpy(rtn,nil);
+        clean_up_kv(key,NULL);
+        return rtn;
+    }
+    if(!kvp->value){
+        clean_up_kv(kvp->key,kvp->value);
+        clean_up_kv(key,NULL);
+        return NULL;
+    }
+    switch (((ValueNode*)kvp->value)->dtype){
+        case BULK_STR:
+            from_val_nd_str_to_str((ValueNodeString*) kvp->value, &rtn);
+            clean_up_kv(kvp->key,kvp->value);
+            clean_up_kv(key,NULL);
+            return rtn;
+        default:
+            clean_up_kv(kvp->key,kvp->value);
+            clean_up_kv(key,NULL);
+            return NULL;
+    }
+
+};
+unsigned char
+is_get_cmd_valid(void* gnode){
+    BulkStringNode* blk_s_nd = (BulkStringNode*)gnode;
+    if(!blk_s_nd || !blk_s_nd->content || blk_s_nd->size<0){
+        return 0;
+    }
+    if(!blk_s_nd->node || blk_s_nd->node->next || blk_s_nd->node->type!=BULK_STR){
+        return 0;
+    }
+    return 1;
+
+};
 
 char* 
 handle_echo_cmd(void* fst_nod){
@@ -201,7 +255,7 @@ execute_set_cmd(char state, GenericNode** parsed_cmd,  SimpleMap* sm){
     }
     value = create_value_node(v);
     if(!value){
-        clean_up_execute_set_cmd(key, NULL);
+        clean_up_kv(key, NULL);
         return NULL;
     }
     kvp = create_key_val_pair(key,value);
@@ -221,6 +275,30 @@ execute_set_cmd(char state, GenericNode** parsed_cmd,  SimpleMap* sm){
             break;
     }
     return NULL;
+}
+char*
+from_val_nd_str_to_str(const ValueNodeString* src, char** rtn_val){
+    char content_size_buf[16] = {0};
+    int   content_size = src->size;
+    sprintf(content_size_buf, "%d", content_size);
+    int rtn_val_size = 1 + strlen(content_size_buf) + 2 + src->size + 3;
+    *rtn_val = (char*)calloc(rtn_val_size,sizeof(char));
+    if(!*rtn_val){
+        return NULL;
+    }
+    int pos = 0;
+    memcpy(*rtn_val,"$",1);
+    pos++;
+    memcpy(*rtn_val+pos,content_size_buf,strlen(content_size_buf));
+    pos+=strlen(content_size_buf);
+    memcpy(*rtn_val+pos,"\r\n",2);
+    pos+=2;
+    memcpy(*rtn_val+pos,src->content,src->size);
+    pos+=src->size;
+    memcpy(*rtn_val+pos,"\r\n",2);
+    pos+=2;
+    *(*rtn_val+pos) = '\0';
+    return *rtn_val;
 }
 
 /**
@@ -254,7 +332,7 @@ execute_set_nxxx_get(SimpleMap* sm, KeyValuePair* kvp, GenericNode** parsed_cmd)
         return NULL;
     }
     if(!parsed_cmd || !parsed_cmd[3]){
-        clean_up_execute_set_cmd(kvp->key,kvp->value);
+        clean_up_kv(kvp->key,kvp->value);
         free(kvp);
         return NULL;
     }
@@ -263,7 +341,7 @@ execute_set_nxxx_get(SimpleMap* sm, KeyValuePair* kvp, GenericNode** parsed_cmd)
     if(kvp_old){
         if(!kvp_old->key || !kvp_old->value ||
            !((KeyNode*)kvp_old->key)->content){
-            clean_up_execute_set_cmd(kvp->key,kvp->value);
+            clean_up_kv(kvp->key,kvp->value);
             free(kvp);
             return NULL;
         }
@@ -272,23 +350,7 @@ execute_set_nxxx_get(SimpleMap* sm, KeyValuePair* kvp, GenericNode** parsed_cmd)
             case BULK_STR:
                 ValueNodeString* old_value_s = (ValueNodeString*)old_value;
                 if(old_value_s->content){
-                    char content_size_buf[16] = {0};
-                    int   content_size = old_value_s->size;
-                    sprintf(content_size_buf, "%d", content_size);
-                    int rtn_val_size = 1 + strlen(content_size_buf) + 2 + old_value_s->size + 3;
-                    rtn_val = (char*)calloc(rtn_val_size,sizeof(char));
-                    int pos = 0;
-                    memcpy(rtn_val,"$",1);
-                    pos++;
-                    memcpy(rtn_val+pos,content_size_buf,strlen(content_size_buf));
-                    pos+=strlen(content_size_buf);
-                    memcpy(rtn_val+pos,"\r\n",2);
-                    pos+=2;
-                    memcpy(rtn_val+pos,old_value_s->content,old_value_s->size);
-                    pos+=old_value_s->size;
-                    memcpy(rtn_val+pos,"\r\n",2);
-                    pos+=2;
-                    rtn_val[pos] = '\0';
+                    from_val_nd_str_to_str(old_value_s, &rtn_val);
                     break;                   
                 }else{
                     cpy_str(nil,strlen(nil), &rtn_val);
@@ -329,7 +391,7 @@ execute_set_nx_xx(SimpleMap* sm, KeyValuePair* kvp, GenericNode** parsed_cmd){
     char* rtn_val = NULL, *option = nx_xx->content;
     char* nil = "$-1\r\n", *sucess="+OK\r\n";
     if(!option){
-        clean_up_execute_set_cmd(kvp->key,kvp->value);
+        clean_up_kv(kvp->key,kvp->value);
         free(kvp);
         return NULL;
     }
@@ -339,7 +401,7 @@ execute_set_nx_xx(SimpleMap* sm, KeyValuePair* kvp, GenericNode** parsed_cmd){
     }else if(strcmp(option,"XX")==0){
         option_val = 2;
     }else{
-        clean_up_execute_set_cmd(kvp->key,kvp->value);
+        clean_up_kv(kvp->key,kvp->value);
         free(kvp);
         return NULL;
     }
@@ -363,7 +425,7 @@ execute_set_nx_xx(SimpleMap* sm, KeyValuePair* kvp, GenericNode** parsed_cmd){
             }else{
                 rtn_val = (char*)calloc(strlen(nil)+1,sizeof(char));
                 strcpy(rtn_val,nil);
-                clean_up_execute_set_cmd(kvp->key,kvp->value);
+                clean_up_kv(kvp->key,kvp->value);
 
             }
             break;
@@ -373,7 +435,7 @@ execute_set_nx_xx(SimpleMap* sm, KeyValuePair* kvp, GenericNode** parsed_cmd){
                     case SUCESS_UPGRADE:
                         rtn_val = (char*)calloc(strlen(sucess)+1,sizeof(char));
                         strcpy(rtn_val,sucess);
-                        clean_up_execute_set_cmd(kvp->key,kvp->value);
+                        clean_up_kv(kvp->key,kvp->value);
                         break;
                     default:
                         rtn_val = (char*)calloc(strlen(nil)+1,sizeof(char));
@@ -383,7 +445,7 @@ execute_set_nx_xx(SimpleMap* sm, KeyValuePair* kvp, GenericNode** parsed_cmd){
             }else{
                 rtn_val = (char*)calloc(strlen(nil)+1,sizeof(char));
                 strcpy(rtn_val,nil);
-                clean_up_execute_set_cmd(kvp->key,kvp->value);
+                clean_up_kv(kvp->key,kvp->value);
             }
             break;
     }
@@ -395,13 +457,13 @@ void* __execute_set_check(SimpleMap* sm, KeyValuePair* kvp){
     if(!kvp || !kvp->key || !kvp->value
         || !sm->values || !sm->keys){
         if(kvp){
-            clean_up_execute_set_cmd(kvp->key,kvp->value);
+            clean_up_kv(kvp->key,kvp->value);
             free(kvp);
         }
     return NULL;
     }
     if(!((KeyNode*)kvp->key)->content){
-        clean_up_execute_set_cmd(kvp->key,kvp->value);
+        clean_up_kv(kvp->key,kvp->value);
         free(kvp);
         return NULL;
     }
@@ -447,7 +509,7 @@ execute_set_get(SimpleMap*    sm,
     int rtn = set(sm,kvp,&compare);
     char *rtn_val = NULL, *rtn_msg = "$-1\r\n";
     if(rtn==ERROR_SET_SM_RTN){
-        clean_up_execute_set_cmd(kvp->key,kvp->value);
+        clean_up_kv(kvp->key,kvp->value);
         free(kvp);
         return rtn_val;
     }
@@ -459,7 +521,7 @@ execute_set_get(SimpleMap*    sm,
     }
     // In this case, the key was already in the map
     if(!kvp->value){
-        clean_up_execute_set_cmd(kvp->key, kvp->value);
+        clean_up_kv(kvp->key, kvp->value);
         free(kvp);
         rtn_val = (char*)calloc(strlen(rtn_msg)+1,sizeof(char));
         strcpy(rtn_val,rtn_msg);
@@ -470,29 +532,13 @@ execute_set_get(SimpleMap*    sm,
         case BULK_STR:
             ValueNodeString* old_value_s = (ValueNodeString*)old_value;
             if(old_value_s->content){
-                char content_size_buf[16] = {0};
-                int   content_size = old_value_s->size;
-                sprintf(content_size_buf, "%d", content_size);
-                int rtn_val_size = 1 + strlen(content_size_buf) + 2 + old_value_s->size + 3;
-                rtn_val = (char*)calloc(rtn_val_size,sizeof(char));
-                int pos = 0;
-                memcpy(rtn_val,"$",1);
-                pos++;
-                memcpy(rtn_val+pos,content_size_buf,strlen(content_size_buf));
-                pos+=strlen(content_size_buf);
-                memcpy(rtn_val+pos,"\r\n",2);
-                pos+=2;
-                memcpy(rtn_val+pos,old_value_s->content,old_value_s->size);
-                pos+=old_value_s->size;
-                memcpy(rtn_val+pos,"\r\n",2);
-                pos+=2;
-                rtn_val[pos] = '\0';
-                clean_up_execute_set_cmd(kvp->key, kvp->value);
+                from_val_nd_str_to_str(old_value_s, &rtn_val);
+                clean_up_kv(kvp->key, kvp->value);
                 free(kvp);
                 return rtn_val;
             }
         default:
-            clean_up_execute_set_cmd(kvp->key, kvp->value);
+            clean_up_kv(kvp->key, kvp->value);
             free(kvp);
             rtn_val = (char*)calloc(strlen(rtn_msg)+1,sizeof(char));
             strcpy(rtn_val,rtn_msg);
@@ -506,13 +552,13 @@ execute_set_basic(SimpleMap*    sm,
     if(!kvp || !kvp->key || !kvp->value
             || !sm->values || !sm->keys){
         if(kvp){
-            clean_up_execute_set_cmd(kvp->key,kvp->value);
+            clean_up_kv(kvp->key,kvp->value);
             free(kvp);
         }
         return NULL;
     }
     if(!((KeyNode*)kvp->key)->content){
-        clean_up_execute_set_cmd(kvp->key,kvp->value);
+        clean_up_kv(kvp->key,kvp->value);
         free(kvp);
         return NULL;
     }
@@ -520,14 +566,14 @@ execute_set_basic(SimpleMap*    sm,
     char *rtn_val = NULL, *rtn_msg = "+OK\r\n";
     if(rtn==ERROR_SET_SM_RTN){
         rtn_val = (char*)calloc(strlen("$-1\r\n")+1,sizeof(char));
-        clean_up_execute_set_cmd(kvp->key,kvp->value);
+        clean_up_kv(kvp->key,kvp->value);
         free(kvp);
     }else if(rtn==SUCESS_SET){
         rtn_val = (char*)calloc(strlen(rtn_msg)+1,sizeof(char));
         strcpy(rtn_val,rtn_msg);
         free(kvp);
     }else{
-        clean_up_execute_set_cmd(kvp->key, kvp->value);
+        clean_up_kv(kvp->key, kvp->value);
         free(kvp);
         rtn_val = (char*)calloc(strlen(rtn_msg)+1,sizeof(char));
         strcpy(rtn_val,rtn_msg);
@@ -537,7 +583,7 @@ execute_set_basic(SimpleMap*    sm,
 }
 
 void
-clean_up_execute_set_cmd(KeyNode* key, ValueNode* value){
+clean_up_kv(KeyNode* key, ValueNode* value){
     if(key){
         if(key->content){
             free(key->content);

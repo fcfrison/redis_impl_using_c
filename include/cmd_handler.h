@@ -41,7 +41,7 @@ char*         parse_command(void* node, SimpleMap* sm);
 char*         __handle_echo_cmd(void* node, int* size);
 char*         handle_set_cmd(void* node, SimpleMap* sm);
 unsigned char is_set_option_valid(char* state, char bit_pos);
-void          clean_up_execute_set_cmd(KeyNode* key, ValueNode* value);
+void          clean_up_kv(KeyNode* key, ValueNode* value);
 ValueNode*    create_value_node_string(char* content, RedisDtype dtype, int size);
 void*         validate_set_cmd(void* node, char* state, GenericNode*** parsed_cmd);
 char*         execute_set_cmd(char state, GenericNode** parsed_cmd,  SimpleMap* sm);
@@ -52,4 +52,6 @@ char*         execute_set_basic(SimpleMap* sm, KeyValuePair* kvp);
 void          handle_set_options(char* state, GenericNode** parsed_cmd, GenericNode** gnode, char bit_pos);
 char*         execute_set_nx_xx(SimpleMap* sm, KeyValuePair* kvp, GenericNode** parsed_cmd);
 char*         execute_set_nxxx_get(SimpleMap* sm, KeyValuePair* kvp, GenericNode** parsed_cmd);
+char*         handle_get_cmd(void* gnode, SimpleMap* sm);
+unsigned char is_get_cmd_valid(void* gnode);
 #endif 

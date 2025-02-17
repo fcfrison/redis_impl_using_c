@@ -495,46 +495,46 @@ void test_validate_set_cmd_invalid_set_key_value_invalid_option() {
 }
 
 // Test cases
-void test_clean_up_execute_set_cmd_key_only() {
+void test_clean_up_kv_key_only() {
     KeyNode* key = create_key_node("test_key", 0, 0, 8);
     assert(key != NULL); // Ensure key creation was successful
-    clean_up_execute_set_cmd(key, NULL);
+    clean_up_kv(key, NULL);
 
     // If the function works correctly, the memory should be freed, and no assertions are needed.
     // This test ensures no memory leaks or crashes.
 }
 
-void test_clean_up_execute_set_cmd_value_only() {
+void test_clean_up_kv_value_only() {
     ValueNode* value = create_value_node_string("test_value", BULK_STR, 10);
     assert(value != NULL); // Ensure value creation was successful
-    clean_up_execute_set_cmd(NULL, value);
+    clean_up_kv(NULL, value);
 
     // If the function works correctly, the memory should be freed, and no assertions are needed.
     // This test ensures no memory leaks or crashes.
 }
 
-void test_clean_up_execute_set_cmd_both_key_and_value() {
+void test_clean_up_kv_both_key_and_value() {
     KeyNode* key = create_key_node("test_key", 0, 0, 8);
     assert(key != NULL); // Ensure key creation was successful
     ValueNode* value = create_value_node_string("test_value", BULK_STR, 10);
     assert(value != NULL); // Ensure value creation was successful
-    clean_up_execute_set_cmd(key, value);
+    clean_up_kv(key, value);
 
     // If the function works correctly, the memory should be freed, and no assertions are needed.
     // This test ensures no memory leaks or crashes.
 }
 
-void test_clean_up_execute_set_cmd_null_key_and_value() {
-    clean_up_execute_set_cmd(NULL, NULL);
+void test_clean_up_kv_null_key_and_value() {
+    clean_up_kv(NULL, NULL);
 
     // If the function works correctly, it should handle NULL inputs without crashing.
 }
 
-void test_clean_up_execute_set_cmd_value_other_type() {
+void test_clean_up_kv_value_other_type() {
     ValueNode* value = (ValueNode*)malloc(sizeof(ValueNode));
     value->content = NULL;
     value->dtype = UNDEF_DTYPE;
-    clean_up_execute_set_cmd(NULL, value);
+    clean_up_kv(NULL, value);
 
     // If the function works correctly, it should handle non-BULK_STR types without crashing.
 }
@@ -1281,7 +1281,7 @@ void test_execute_set_nxxx_get_nx_success() {
     free(nx_node->content);
     free(nx_node);
     free(bn);
-    clean_up_execute_set_cmd(key, value);
+    clean_up_kv(key, value);
 }
 void test_execute_set_nxxx_get_nx_failure() {
     SimpleMap* sm            = create_simple_map();
@@ -1486,12 +1486,12 @@ int main() {
     test_validate_set_cmd_invalid_set_key_value_missing_value();
     test_validate_set_cmd_invalid_set_key_value_invalid_option();
     
-    // clean_up_execute_set_cmd
-    test_clean_up_execute_set_cmd_key_only();
-    test_clean_up_execute_set_cmd_value_only();
-    test_clean_up_execute_set_cmd_both_key_and_value();
-    test_clean_up_execute_set_cmd_null_key_and_value();
-    test_clean_up_execute_set_cmd_value_other_type();
+    // clean_up_kv
+    test_clean_up_kv_key_only();
+    test_clean_up_kv_value_only();
+    test_clean_up_kv_both_key_and_value();
+    test_clean_up_kv_null_key_and_value();
+    test_clean_up_kv_value_other_type();
     
     // create_key_node
     test_create_key_node_valid();
