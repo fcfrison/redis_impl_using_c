@@ -33,6 +33,16 @@ enum SET_STATES{
     SET_GET_EXPX             = 0b01110111, // 0111 0111
     SET_NXXX_GET             = 0b01111100  // 0111 1100
 };
+typedef enum {
+    OPTION_NX,
+    OPTION_XX,
+    OPTION_GET,
+    OPTION_EX,
+    OPTION_PX,
+    OPTION_EXAT,
+    OPTION_PXAT,
+    OPTION_INVALID
+} OptionType;
 
 char*         handle_echo_cmd(void* fst_nod);
 ValueNode*    create_value_node(GenericNode* gnode);
@@ -54,4 +64,5 @@ char*         execute_set_nx_xx(SimpleMap* sm, KeyValuePair* kvp, GenericNode** 
 char*         execute_set_nxxx_get(SimpleMap* sm, KeyValuePair* kvp, GenericNode** parsed_cmd);
 char*         handle_get_cmd(const void* gnode, SimpleMap* sm);
 unsigned char is_get_cmd_valid(const void* gnode);
+char* execute_set_ex_px_exat_pxat(SimpleMap* sm, KeyValuePair* kvp, GenericNode** parsed_cmd);
 #endif 

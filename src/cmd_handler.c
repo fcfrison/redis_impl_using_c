@@ -6,14 +6,16 @@
 #include "../include/protocol.h"
 #include "../include/simple_map.h"
 #include "../include/cmd_handler.h"
+#include "../include/util.h"
 #define MAX_BYTES_ARR_SIZE 20 
 #define MAX_BYTES_BULK_STR 9
 
 // Prototypes
-void* __execute_set_check(SimpleMap* sm, KeyValuePair* kvp);
-void cpy_str(const char* src, const size_t str_len, char** dest);
+void  cpy_str(const char* src, const size_t str_len, char** dest);
 char* from_val_nd_str_to_str(const ValueNodeString* src, char** rtn_val);
-
+void* __execute_set_check(SimpleMap* sm, KeyValuePair* kvp);
+void  __validate_px_ex_content(BulkStringNode* node, char* state);
+OptionType get_option_type(const char* option);
 
 char*
 parse_command(void* node, SimpleMap* sm){
@@ -217,7 +219,8 @@ create_value_node(GenericNode* gnode){
     }
 }
 
-void* compare(const void* a, const void* b){
+void* 
+compare(const void* a, const void* b){
     if(!a || !b){
         return NULL;
     }
@@ -269,6 +272,7 @@ execute_set_cmd(char state, GenericNode** parsed_cmd,  SimpleMap* sm){
         case SET_NXXX_GET:
             return execute_set_nxxx_get(sm, kvp, parsed_cmd);
         case SET_EX_PX_EXAL_PXAT:
+            return execute_set_ex_px_exat_pxat(sm, kvp, parsed_cmd);
         case SET_GET_EXPX:
         case SET_NXXX_EXPX:
         default:
@@ -379,6 +383,33 @@ cpy_str(const char* src, const size_t str_len, char** dest){
     return;
 };
 
+char*
+execute_set_ex_px_exat_pxat(SimpleMap* sm, KeyValuePair* kvp, GenericNode** parsed_cmd){
+    if(!__execute_set_check(sm,kvp) || !parsed_cmd    || 
+       !parsed_cmd[1]               || !parsed_cmd[0]){
+        return NULL;
+    }
+    BulkStringNode* option_nd = (BulkStringNode*)parsed_cmd[1];
+    BulkStringNode* time_nd   = (BulkStringNode*)parsed_cmd[0];
+    KeyNode* key              = (KeyNode*)kvp->key;
+    char* option = option_nd->content;
+    unsigned int time = string_to_uint(time_nd->content);
+    switch (get_option_type(option) ){
+        case OPTION_EX:
+        case OPTION_EXAT:
+            key->ex = time;
+            break;
+        case OPTION_PX:
+        case OPTION_PXAT:
+            key->px = time;
+            break;
+        default:
+            clean_up_kv(kvp->key, kvp->value);
+            return NULL;
+    }
+    return execute_set_basic(sm, kvp);
+};
+
 
 /**
 * Executes a Redis SET command with NX or XX option.
@@ -479,7 +510,8 @@ execute_set_nx_xx(SimpleMap* sm, KeyValuePair* kvp, GenericNode** parsed_cmd){
     return rtn_val;
 }
 
-void* __execute_set_check(SimpleMap* sm, KeyValuePair* kvp){
+void*
+__execute_set_check(SimpleMap* sm, KeyValuePair* kvp){
     if(!kvp || !kvp->key || !kvp->value
         || !sm->values || !sm->keys){
         if(kvp){
@@ -527,8 +559,7 @@ void* __execute_set_check(SimpleMap* sm, KeyValuePair* kvp){
  *       it's the first time the key is inserted or if it was already present.
  */
 char*
-execute_set_get(SimpleMap*    sm,
-                KeyValuePair* kvp){
+execute_set_get(SimpleMap* sm, KeyValuePair* kvp){
     if(!__execute_set_check(sm, kvp)){
         return NULL;
     }
@@ -572,9 +603,7 @@ execute_set_get(SimpleMap*    sm,
     }
 }
 char*
-execute_set_basic(SimpleMap*    sm,
-                  KeyValuePair* kvp
-                ){
+execute_set_basic(SimpleMap* sm, KeyValuePair* kvp){
     if(!kvp || !kvp->key || !kvp->value
             || !sm->values || !sm->keys){
         if(kvp){
@@ -590,20 +619,22 @@ execute_set_basic(SimpleMap*    sm,
     }
     int rtn = set(sm,kvp,&compare);
     char *rtn_val = NULL, *rtn_msg = "+OK\r\n";
-    if(rtn==ERROR_SET_SM_RTN){
-        rtn_val = (char*)calloc(strlen("$-1\r\n")+1,sizeof(char));
-        clean_up_kv(kvp->key,kvp->value);
-        free(kvp);
-    }else if(rtn==SUCESS_SET){
-        rtn_val = (char*)calloc(strlen(rtn_msg)+1,sizeof(char));
-        strcpy(rtn_val,rtn_msg);
-        free(kvp);
-    }else{
-        clean_up_kv(kvp->key, kvp->value);
-        free(kvp);
-        rtn_val = (char*)calloc(strlen(rtn_msg)+1,sizeof(char));
-        strcpy(rtn_val,rtn_msg);
+    switch (rtn){
+        case ERROR_SET_SM_RTN:
+            rtn_val = (char*)calloc(strlen("$-1\r\n")+1,sizeof(char));
+            clean_up_kv(kvp->key,kvp->value);
+            break;
+        case SUCESS_SET:
+            rtn_val = (char*)calloc(strlen(rtn_msg)+1,sizeof(char));
+            strcpy(rtn_val,rtn_msg);
+            break;
+        default:
+            clean_up_kv(kvp->key, kvp->value);
+            rtn_val = (char*)calloc(strlen(rtn_msg)+1,sizeof(char));
+            strcpy(rtn_val,rtn_msg);
+            break;
     }
+    free(kvp);
     return rtn_val;
 
 }
@@ -648,10 +679,7 @@ clean_up_kv(KeyNode* key, ValueNode* value){
  */
 void*
 validate_set_cmd(void* node, char* state, GenericNode*** parsed_cmd){
-    if(!state){
-        return NULL;
-    }
-    if(!node){
+    if(!state || !node){
         return NULL;
     }
     GenericNode* gnode = (GenericNode*)node;
@@ -665,26 +693,70 @@ validate_set_cmd(void* node, char* state, GenericNode*** parsed_cmd){
         }
         blk_s_nd = (BulkStringNode*) next;
         option   = blk_s_nd->content;
-        if(!strcmp(option,"NX") || !strcmp(option,"XX")){
-            handle_set_options(state, *parsed_cmd, &next,3);  
-        }else if(!strcmp(option,"GET")){
-            handle_set_options(state, *parsed_cmd, &next,2);
-        }else if(!strcmp(option,"EX")   || !strcmp(option,"PX") ||
-                 !strcmp(option,"EXAT") || !strcmp(option,"PXAT")){
-            handle_set_options(state, *parsed_cmd, &next,1);
-            if(!next || next->node->type!=BULK_STR || next->node->next){
+        switch (get_option_type(option)){
+            case OPTION_NX:
+            case OPTION_XX:
+                handle_set_options(state, *parsed_cmd, &next,3); 
+                break;
+            case OPTION_GET:
+                handle_set_options(state, *parsed_cmd, &next,2);
+                break;
+            case OPTION_EX:
+            case OPTION_EXAT:
+            case OPTION_PX:
+            case OPTION_PXAT:
+                handle_set_options(state, *parsed_cmd, &next,1);
+                if(!next || next->node->type!=BULK_STR || next->node->next){
+                    return NULL;
+                }
+                BulkStringNode* last_nd = (BulkStringNode*)next;
+                handle_set_options(state, *parsed_cmd, &next,0);
+                __validate_px_ex_content(last_nd, state);
+                break;
+            default:
                 return NULL;
-            }
-            handle_set_options(state, *parsed_cmd, &next,0);
         }
-        else{
-            return NULL;
-        }   
     }
     if(*state<0){
         return NULL;
     }
     return state;
+}
+
+OptionType get_option_type(const char* option) {
+    if (!strcmp(option, "NX")) return OPTION_NX;
+    if (!strcmp(option, "XX")) return OPTION_XX;
+    if (!strcmp(option, "GET")) return OPTION_GET;
+    if (!strcmp(option, "EX")) return OPTION_EX;
+    if (!strcmp(option, "PX")) return OPTION_PX;
+    if (!strcmp(option, "EXAT")) return OPTION_EXAT;
+    if (!strcmp(option, "PXAT")) return OPTION_PXAT;
+    return OPTION_INVALID;
+}
+
+void
+__validate_px_ex_content(BulkStringNode* node, char* state){
+    if(!state || *state<0){
+        return;
+    }
+    if(!node){
+        *state = -1;
+        return;
+    }
+    const char* content = node->content;
+    const size_t size   = (size_t)node->size;
+    if(!content || size<1){
+        *state = -1;
+        return;
+    }
+    for (size_t i = 0; i < size; i++){
+        if(content[i]<48 ||content[i]>57){
+            *state=-1;
+            return;
+        }
+    }
+    return;
+    
 }
 
 /**
@@ -701,10 +773,7 @@ validate_set_cmd(void* node, char* state, GenericNode*** parsed_cmd){
  * @param bit_pos Position in state bitmap for current option (0-3)
  */
 void
-handle_set_options(char* state,
-                  GenericNode** parsed_cmd,
-                  GenericNode** gnode,
-                  char bit_pos){
+handle_set_options(char* state, GenericNode** parsed_cmd, GenericNode** gnode, char bit_pos){
     if(state==NULL){
         return;
     }
