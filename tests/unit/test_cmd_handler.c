@@ -313,6 +313,7 @@ BulkStringNode* create_bulk_string_node(const char* content, GenericNode* next) 
     bnode->prev = NULL;
     node->node  = bnode;
     node->content = strdup(content);
+    node->size    = strlen(content);
     return node;
 }
 // Basic unit tests
@@ -415,7 +416,7 @@ void test_validate_set_cmd_valid_set_key_value_nx() {
     free(nx_node);
     free(parsed_cmd);
 }
-void test_validate_set_cmd_valid_set_key_value_ex() {
+void test_validate_set_cmd_valid_set_key_value_ex_success() {
     GenericNode* ex_node_val    = (GenericNode*)create_bulk_string_node("10", NULL);
     GenericNode* ex_node    = (GenericNode*)create_bulk_string_node("EX", ex_node_val);
     GenericNode* value_node = (GenericNode*)create_bulk_string_node("value", ex_node);
@@ -439,7 +440,30 @@ void test_validate_set_cmd_valid_set_key_value_ex() {
     free(ex_node_val);
     free(parsed_cmd);
 }
+void test_validate_set_cmd_valid_set_key_value_ex_failure_negative_number() {
+    GenericNode* ex_node_val    = (GenericNode*)create_bulk_string_node("-10", NULL);
+    GenericNode* ex_node    = (GenericNode*)create_bulk_string_node("EX", ex_node_val);
+    GenericNode* value_node = (GenericNode*)create_bulk_string_node("value", ex_node);
+    GenericNode* key_node   = (GenericNode*)create_bulk_string_node("key", value_node);
+    GenericNode** parsed_cmd = NULL;
+    char state = 0;
 
+    void* result = validate_set_cmd(key_node, &state, &parsed_cmd);
+
+    assert(result == NULL); // Function should return non-NULL for valid SET command with EX
+    assert(state  == -1); // Final state should be 0b01110011
+    assert(parsed_cmd != NULL); // parsed_cmd should be allocated
+
+    free(key_node->node);
+    free(key_node);
+    free(value_node->node);
+    free(value_node);
+    free(ex_node->node);
+    free(ex_node);
+    free(ex_node_val->node);
+    free(ex_node_val);
+    free(parsed_cmd);
+}
 void test_validate_set_cmd_invalid_set_key_value_ex() {
     GenericNode* ex_node    = (GenericNode*)create_bulk_string_node("EX", NULL);
     GenericNode* value_node = (GenericNode*)create_bulk_string_node("value", ex_node);
@@ -1533,6 +1557,151 @@ void test_handle_get_cmd_null_sm() {
     free(blk_s_nd);
 }
 
+
+
+void test_execute_set_ex_px_exat_pxat_valid_ex() {
+    SimpleMap* sm = create_simple_map();
+    KeyNode* key = create_key_node("test_key", 0, 0, strlen("test_key"));
+    ValueNode* value = create_value_node_string("test_value", BULK_STR, strlen("test_value"));
+    KeyValuePair* kvp = create_key_val_pair(key, value);
+    GenericNode** parsed_cmd = (GenericNode**)calloc(6, sizeof(GenericNode*));
+    BulkStringNode* option_nd = (BulkStringNode*)calloc(1, sizeof(BulkStringNode));
+    BaseNode* bn = (BaseNode*)calloc(1, sizeof(BaseNode));
+    bn->next = bn->prev = NULL;
+    bn->type = BULK_STR;
+    option_nd->node = bn;
+    BulkStringNode* time_nd = (BulkStringNode*)calloc(1, sizeof(BulkStringNode));
+    bn = (BaseNode*)calloc(1, sizeof(BaseNode));
+    bn->next = bn->prev = NULL;
+    bn->type = BULK_STR;
+    time_nd->node = bn;
+    option_nd->content  = strdup("EX");
+    time_nd->content = strdup("10");
+    parsed_cmd[1] = (GenericNode*)option_nd;
+    parsed_cmd[0] = (GenericNode*)time_nd;
+
+    char* result = execute_set_ex_px_exat_pxat(sm, kvp, parsed_cmd);
+
+    assert(result != NULL); // Ensure result is not NULL for valid EX option
+    assert(strcmp(result, "+OK\r\n") == 0); // Ensure the correct response message
+    assert(key->ex == 10); // Ensure the expiration time is set correctly
+
+    free(result);
+    free(parsed_cmd);
+    free(option_nd->content);
+    free(option_nd);
+    free(time_nd->content);
+    free(time_nd);
+    free(((KeyNode*)sm->keys[0]->key)->content);
+    free(((KeyNode*)sm->keys[0]->key)->input_time);
+    free(((KeyNode*)sm->keys[0]->key));
+    free(((ValueNodeString*)sm->values[0]->value)->content);
+    free(((ValueNodeString*)sm->values[0]->value));
+}
+void test_execute_set_ex_px_exat_pxat_valid_px() {
+    SimpleMap* sm = create_simple_map();
+    KeyNode* key = create_key_node("test_key", 0, 0, strlen("test_key"));
+    ValueNode* value = create_value_node_string("test_value", BULK_STR, strlen("test_value"));
+    KeyValuePair* kvp = create_key_val_pair(key, value);
+    GenericNode** parsed_cmd = (GenericNode**)calloc(6, sizeof(GenericNode*));
+    BulkStringNode* option_nd = (BulkStringNode*)calloc(1, sizeof(BulkStringNode));
+    BaseNode* bn = (BaseNode*)calloc(1, sizeof(BaseNode));
+    bn->next = bn->prev = NULL;
+    bn->type = BULK_STR;
+    option_nd->node = bn;
+    BulkStringNode* time_nd = (BulkStringNode*)calloc(1, sizeof(BulkStringNode));
+    bn = (BaseNode*)calloc(1, sizeof(BaseNode));
+    bn->next = bn->prev = NULL;
+    bn->type = BULK_STR;
+    time_nd->node = bn;
+    option_nd->content = strdup("PX");
+    time_nd->content = strdup("1000");
+    parsed_cmd[1] = (GenericNode*)option_nd;
+    parsed_cmd[0] = (GenericNode*)time_nd;
+
+    char* result = execute_set_ex_px_exat_pxat(sm, kvp, parsed_cmd);
+
+    assert(result != NULL); // Ensure result is not NULL for valid PX option
+    assert(strcmp(result, "+OK\r\n") == 0); // Ensure the correct response message
+    assert(key->px == 1000); // Ensure the expiration time is set correctly
+
+    free(result);
+    free(parsed_cmd);
+    free(option_nd->content);
+    free(option_nd);
+    free(time_nd->content);
+    free(time_nd);
+    free(((KeyNode*)sm->keys[0]->key)->content);
+    free(((KeyNode*)sm->keys[0]->key)->input_time);
+    free(((KeyNode*)sm->keys[0]->key));
+    free(((ValueNodeString*)sm->values[0]->value)->content);
+    free(((ValueNodeString*)sm->values[0]->value));
+}
+
+void test_execute_set_ex_px_exat_pxat_invalid_option() {
+    SimpleMap* sm = create_simple_map();
+    KeyNode* key = create_key_node("test_key", 0, 0, strlen("test_key"));
+    ValueNode* value = create_value_node_string("test_value", BULK_STR, strlen("test_value"));
+    KeyValuePair* kvp = create_key_val_pair(key, value);
+    GenericNode** parsed_cmd = (GenericNode**)calloc(6, sizeof(GenericNode*));
+    BulkStringNode* option_nd = (BulkStringNode*)calloc(1, sizeof(BulkStringNode));
+    BaseNode* bn = (BaseNode*)calloc(1, sizeof(BaseNode));
+    bn->next = bn->prev = NULL;
+    bn->type = BULK_STR;
+    option_nd->node = bn;
+    BulkStringNode* time_nd = (BulkStringNode*)calloc(1, sizeof(BulkStringNode));
+    bn = (BaseNode*)calloc(1, sizeof(BaseNode));
+    bn->next = bn->prev = NULL;
+    bn->type = BULK_STR;
+    time_nd->node = bn;
+    option_nd->content = strdup("INVALID");
+    time_nd->content = strdup("10");
+    parsed_cmd[1] = (GenericNode*)option_nd;
+    parsed_cmd[0] = (GenericNode*)time_nd;
+
+    char* result = execute_set_ex_px_exat_pxat(sm, kvp, parsed_cmd);
+
+    assert(result == NULL); // Ensure NULL is returned for invalid option
+
+    free(parsed_cmd);
+    free(option_nd->content);
+    free(option_nd->node);
+    free(option_nd);
+    free(time_nd->content);
+    free(time_nd->node);
+    free(time_nd);
+    free(sm->keys);
+    free(sm->values);
+    free(sm);
+}
+void test_execute_set_ex_px_exat_pxat_null_parsed_cmd() {
+    SimpleMap* sm = create_simple_map();
+    KeyNode* key = create_key_node("test_key", 0, 0, strlen("test_key"));
+    ValueNode* value = create_value_node_string("test_value", BULK_STR, strlen("test_value"));
+    KeyValuePair* kvp = create_key_val_pair(key, value);
+
+    char* result = execute_set_ex_px_exat_pxat(sm, kvp, NULL);
+
+    assert(result == NULL); // Ensure NULL is returned for NULL parsed_cmd
+
+    clean_up_kv(key, value);
+    free(kvp);
+}
+void test_execute_set_ex_px_exat_pxat_null_option_or_time() {
+    SimpleMap* sm = create_simple_map();
+    KeyNode* key = create_key_node("test_key", 0, 0, strlen("test_key"));
+    ValueNode* value = create_value_node_string("test_value", BULK_STR, strlen("test_value"));
+    KeyValuePair* kvp = create_key_val_pair(key, value);
+    GenericNode** parsed_cmd = (GenericNode**)calloc(6, sizeof(GenericNode*));
+
+    char* result = execute_set_ex_px_exat_pxat(sm, kvp, parsed_cmd);
+
+    assert(result == NULL); // Ensure NULL is returned for NULL option or time
+
+    free(parsed_cmd);
+    clean_up_kv(key, value);
+    free(kvp);
+}
 int main() {
     test_is_set_option_valid();
     test_handle_set_options_valid();
@@ -1558,7 +1727,8 @@ int main() {
     // SET command tests
     test_validate_set_cmd_valid_set_key_value();
     test_validate_set_cmd_valid_set_key_value_nx();
-    test_validate_set_cmd_valid_set_key_value_ex();
+    test_validate_set_cmd_valid_set_key_value_ex_success();
+    test_validate_set_cmd_valid_set_key_value_ex_failure_negative_number();
     test_validate_set_cmd_invalid_set_key_value_ex();
     test_validate_set_cmd_invalid_set_key_value_missing_value();
     test_validate_set_cmd_invalid_set_key_value_invalid_option();
@@ -1635,6 +1805,13 @@ int main() {
     test_handle_get_cmd_key_not_found();
     test_handle_get_cmd_invalid_gnode();
     test_handle_get_cmd_null_sm();
+    
+    // execute_set_ex_px_exat_pxat
+    test_execute_set_ex_px_exat_pxat_valid_ex();
+    test_execute_set_ex_px_exat_pxat_valid_px();
+    test_execute_set_ex_px_exat_pxat_invalid_option();
+    test_execute_set_ex_px_exat_pxat_null_parsed_cmd();
+    test_execute_set_ex_px_exat_pxat_null_option_or_time();
     puts("All tests passed");
     return 0;
 }
