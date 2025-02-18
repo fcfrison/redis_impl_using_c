@@ -52,6 +52,6 @@ char*         execute_set_basic(SimpleMap* sm, KeyValuePair* kvp);
 void          handle_set_options(char* state, GenericNode** parsed_cmd, GenericNode** gnode, char bit_pos);
 char*         execute_set_nx_xx(SimpleMap* sm, KeyValuePair* kvp, GenericNode** parsed_cmd);
 char*         execute_set_nxxx_get(SimpleMap* sm, KeyValuePair* kvp, GenericNode** parsed_cmd);
-char*         handle_get_cmd(void* gnode, SimpleMap* sm);
-unsigned char is_get_cmd_valid(void* gnode);
+char*         handle_get_cmd(const void* gnode, SimpleMap* sm);
+unsigned char is_get_cmd_valid(const void* gnode);
 #endif 

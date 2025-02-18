@@ -42,7 +42,7 @@ parse_command(void* node, SimpleMap* sm){
 }
 
 char*
-handle_get_cmd(void* gnode, SimpleMap* sm){
+handle_get_cmd(const void* gnode, SimpleMap* sm){
     if(!is_get_cmd_valid(gnode)){
         return NULL;
     }
@@ -60,25 +60,25 @@ handle_get_cmd(void* gnode, SimpleMap* sm){
         return rtn;
     }
     if(!kvp->value){
-        clean_up_kv(kvp->key,kvp->value);
         clean_up_kv(key,NULL);
+        free(kvp);
         return NULL;
     }
     switch (((ValueNode*)kvp->value)->dtype){
         case BULK_STR:
             from_val_nd_str_to_str((ValueNodeString*) kvp->value, &rtn);
-            clean_up_kv(kvp->key,kvp->value);
             clean_up_kv(key,NULL);
+            free(kvp);
             return rtn;
         default:
-            clean_up_kv(kvp->key,kvp->value);
             clean_up_kv(key,NULL);
+            free(kvp);
             return NULL;
     }
 
 };
 unsigned char
-is_get_cmd_valid(void* gnode){
+is_get_cmd_valid(const void* gnode){
     BulkStringNode* blk_s_nd = (BulkStringNode*)gnode;
     if(!blk_s_nd || !blk_s_nd->content || blk_s_nd->size<0){
         return 0;
@@ -379,6 +379,32 @@ cpy_str(const char* src, const size_t str_len, char** dest){
     return;
 };
 
+
+/**
+* Executes a Redis SET command with NX or XX option.
+*
+* This function implements the following Redis SET behaviors:
+* - NX: Only set the key if it does not already exist.
+*       Returns "+OK\r\n" on successful set, "$-1\r\n" if key exists
+* - XX: Only set the key if it already exists.
+*       Returns "+OK\r\n" on successful update, "$-1\r\n" if key doesn't exist
+*
+* @param sm           Pointer to the SimpleMap data structure storing key-value pairs
+* @param kvp          Pointer to the KeyValuePair to be set (will be freed by this function)
+* @param parsed_cmd   Array of GenericNode pointers representing the parsed command
+*                     parsed_cmd[3] must contain a BulkStringNode with "NX" or "XX" content
+*
+* @return A dynamically allocated string containing the RESP-formatted response,
+*         or NULL in the following error cases:
+*         - If __execute_set_check() fails
+*         - If parsed_cmd or parsed_cmd[3] are NULL
+*         - If parsed_cmd[3]'s content is NULL
+*         - If option is neither "NX" nor "XX"
+*         The caller is responsible for freeing the returned memory when not NULL.
+*
+* @note This function takes ownership of kvp and will free it appropriately.
+*       Any stored key-value pair will be cleaned up using clean_up_kv() if needed.
+*/
 char*
 execute_set_nx_xx(SimpleMap* sm, KeyValuePair* kvp, GenericNode** parsed_cmd){
     

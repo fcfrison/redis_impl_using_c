@@ -1451,10 +1451,87 @@ void test_execute_set_nxxx_get_null_option() {
     char* result = execute_set_nxxx_get(sm, kvp, parsed_cmd);
 
     assert(result == NULL); // Ensure NULL is returned for NULL option
-
+    free(sm);
     free(parsed_cmd);
 }
+void test_handle_get_cmd_valid_bulk_str() {
+    BulkStringNode* blk_s_nd = (BulkStringNode*)calloc(1,sizeof(BulkStringNode));
+    blk_s_nd->content        = strdup("test_key");
+    blk_s_nd->size           = strlen("test_key");
+    BaseNode* bn             = (BaseNode*)calloc(1, sizeof(BaseNode));
+    bn->next                 = bn->prev = NULL;
+    bn->type                 = BULK_STR;
+    blk_s_nd->node           = bn;
+    SimpleMap* sm            = create_simple_map();
+    KeyNode* key             = create_key_node("test_key", 0, 0, strlen("test_key"));
+    ValueNode* value         = create_value_node_string("test_value", BULK_STR, strlen("test_value"));
+    KeyValuePair* kvp        = create_key_val_pair(key, value);
+    set(sm,kvp,&compare);
+    char* result = handle_get_cmd(blk_s_nd, sm);
 
+    assert(result != NULL); // Ensure result is not NULL for valid bulk string
+    assert(strcmp(result, "$10\r\ntest_value\r\n") == 0); // Ensure the correct response message
+
+    free(result);
+    free(((KeyNode*)sm->keys[0]->key)->content);
+    free(((KeyNode*)sm->keys[0]->key)->input_time);
+    free(((KeyNode*)sm->keys[0]->key));
+    free(((ValueNodeString*)sm->values[0]->value)->content);
+    free(((ValueNodeString*)sm->values[0]->value));
+    free(sm->keys);
+    free(sm->values);
+    free(sm);
+    free(bn);
+    free(blk_s_nd->content);
+    free(blk_s_nd);
+}
+
+void test_handle_get_cmd_key_not_found() {
+    SimpleMap* sm            = create_simple_map();
+    BulkStringNode* blk_s_nd = (BulkStringNode*)malloc(sizeof(BulkStringNode));
+    blk_s_nd->content        = strdup("nonexistent_key");
+    blk_s_nd->size           = strlen("nonexistent_key");
+    BaseNode* bn             = (BaseNode*)calloc(1, sizeof(BaseNode));
+    bn->next                 = bn->prev = NULL;
+    bn->type                 = BULK_STR;
+    blk_s_nd->node           = bn;
+    char* result             = handle_get_cmd(blk_s_nd, sm);
+
+    assert(result != NULL); // Ensure result is not NULL for key not found
+    assert(strcmp(result, "$-1\r\n") == 0); // Ensure the correct response message
+
+    free(result);
+    free(blk_s_nd->content);
+    free(blk_s_nd);
+    free(sm->keys);
+    free(sm->values);
+    free(sm);
+    free(bn);
+}
+
+void test_handle_get_cmd_invalid_gnode() {
+    SimpleMap* sm = create_simple_map();
+
+    char* result = handle_get_cmd(NULL, sm);
+
+    assert(result == NULL); // Ensure NULL is returned for invalid gnode
+    free(sm->keys);
+    free(sm->values);
+    free(sm);
+}
+
+void test_handle_get_cmd_null_sm() {
+    BulkStringNode* blk_s_nd = (BulkStringNode*)calloc(1,sizeof(BulkStringNode));
+    blk_s_nd->content = strdup("test_key");
+    blk_s_nd->size = strlen("test_key");
+
+    char* result = handle_get_cmd(blk_s_nd, NULL);
+
+    assert(result == NULL); // Ensure NULL is returned for NULL sm
+
+    free(blk_s_nd->content);
+    free(blk_s_nd);
+}
 
 int main() {
     test_is_set_option_valid();
@@ -1552,6 +1629,12 @@ int main() {
     test_execute_set_nxxx_get_invalid_option();
     test_execute_set_nxxx_get_null_parsed_cmd();
     test_execute_set_nxxx_get_null_option();
+
+    // handle_get_cmd
+    test_handle_get_cmd_valid_bulk_str();
+    test_handle_get_cmd_key_not_found();
+    test_handle_get_cmd_invalid_gnode();
+    test_handle_get_cmd_null_sm();
     puts("All tests passed");
     return 0;
 }
