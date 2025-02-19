@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include "../include/cmd_handler.h"
 #include "../include/protocol.h"
 #include "../include/simple_map.h"
@@ -1702,6 +1703,154 @@ void test_execute_set_ex_px_exat_pxat_null_option_or_time() {
     clean_up_kv(key, value);
     free(kvp);
 }
+
+// Test case 1: Key has not expired (EX set, time not exceeded)
+void test_has_key_expired_ex_not_expired() {
+    struct timespec curr_time = {100, 0}; // 100 seconds
+    struct timespec prev_time = {50, 0};  // 50 seconds
+    KeyNode new_key = {"key1", &curr_time, 0, 0, 4};
+    KeyNode prev_key = {"key1", &prev_time, 60, 0, 4}; // EX = 60 seconds
+
+    unsigned char result = has_key_expired(&new_key, &prev_key);
+    assert(result == 0);
+}
+// Test case 2: Key has expired (EX set, time exceeded)
+void test_has_key_expired_ex_expired() {
+    struct timespec curr_time = {200, 0}; // 200 seconds
+    struct timespec prev_time = {50, 0};  // 50 seconds
+    KeyNode new_key = {"key1", &curr_time, 0, 0, 4};
+    KeyNode prev_key = {"key1", &prev_time, 60, 0, 4}; // EX = 60 seconds
+
+    unsigned char result = has_key_expired(&new_key, &prev_key);
+    assert(result == 1);
+}
+// Test case 3: Key has not expired (PX set, time not exceeded)
+void test_has_key_expired_px_not_expired() {
+    struct timespec curr_time = {100, 0}; // 100 seconds
+    struct timespec prev_time = {50, 0};  // 50 seconds
+    KeyNode new_key = {"key1", &curr_time, 0, 0, 4};
+    KeyNode prev_key = {"key1", &prev_time, 0, 60000, 4}; // PX = 60000 milliseconds (60 seconds)
+
+    unsigned char result = has_key_expired(&new_key, &prev_key);
+    assert(result == 0);
+}
+// Test case 4: Key has expired (PX set, time exceeded)
+void test_has_key_expired_px_expired() {
+    struct timespec curr_time = {200, 0}; // 200 seconds
+    struct timespec prev_time = {50, 0};  // 50 seconds
+    KeyNode new_key = {"key1", &curr_time, 0, 0, 4};
+    KeyNode prev_key = {"key1", &prev_time, 0, 60000, 4}; // PX = 60000 milliseconds (60 seconds)
+
+    unsigned char result = has_key_expired(&new_key, &prev_key);
+    assert(result == 1);
+}
+// Test case 5: Neither EX nor PX is set (no expiration)
+void test_has_key_expired_no_expiration() {
+    struct timespec curr_time = {100, 0}; // 100 seconds
+    struct timespec prev_time = {50, 0};  // 50 seconds
+    KeyNode new_key = {"key1", &curr_time, 0, 0, 4};
+    KeyNode prev_key = {"key1", &prev_time, 0, 0, 4}; // EX = 0, PX = 0
+
+    unsigned char result = has_key_expired(&new_key, &prev_key);
+    assert(result == 0);
+}
+// Test case 6: EX and PX both set, EX takes precedence (not expired)
+void test_has_key_expired_ex_and_px_ex_not_expired() {
+    struct timespec curr_time = {100, 0}; // 100 seconds
+    struct timespec prev_time = {50, 0};  // 50 seconds
+    KeyNode new_key = {"key1", &curr_time, 0, 0, 4};
+    KeyNode prev_key = {"key1", &prev_time, 60, 60000, 4}; // EX = 60 seconds, PX = 60000 milliseconds
+
+    unsigned char result = has_key_expired(&new_key, &prev_key);
+    assert(result == 0);
+}
+// Test case 7: EX and PX both set, EX takes precedence (expired)
+void test_has_key_expired_ex_and_px_ex_expired() {
+    struct timespec curr_time = {200, 0}; // 200 seconds
+    struct timespec prev_time = {50, 0};  // 50 seconds
+    KeyNode new_key = {"key1", &curr_time, 0, 0, 4};
+    KeyNode prev_key = {"key1", &prev_time, 60, 60000, 4}; // EX = 60 seconds, PX = 60000 milliseconds
+
+    unsigned char result = has_key_expired(&new_key, &prev_key);
+    assert(result == 1);
+}
+
+// Test case 8: EX and PX both set, PX used (not expired)
+void test_has_key_expired_ex_and_px_px_not_expired() {
+    struct timespec curr_time = {100, 0}; // 100 seconds
+    struct timespec prev_time = {50, 0};  // 50 seconds
+    KeyNode new_key = {"key1", &curr_time, 0, 0, 4};
+    KeyNode prev_key = {"key1", &prev_time, 0, 60000, 4}; // EX = 0, PX = 60000 milliseconds
+
+    unsigned char result = has_key_expired(&new_key, &prev_key);
+    assert(result == 0);
+}
+
+// Test case 9: EX and PX both set, PX used (expired)
+void test_has_key_expired_ex_and_px_px_expired() {
+    struct timespec curr_time = {200, 0}; // 200 seconds
+    struct timespec prev_time = {50, 0};  // 50 seconds
+    KeyNode new_key = {"key1", &curr_time, 0, 0, 4};
+    KeyNode prev_key = {"key1", &prev_time, 0, 60000, 4}; // EX = 0, PX = 60000 milliseconds
+
+    unsigned char result = has_key_expired(&new_key, &prev_key);
+    assert(result == 1);
+}
+
+// Test case 10: Edge case - EX set to 0, PX set to 0 (no expiration)
+void test_has_key_expired_ex_zero_px_zero() {
+    struct timespec curr_time = {100, 0}; // 100 seconds
+    struct timespec prev_time = {50, 0};  // 50 seconds
+    KeyNode new_key = {"key1", &curr_time, 0, 0, 4};
+    KeyNode prev_key = {"key1", &prev_time, 0, 0, 4}; // EX = 0, PX = 0
+
+    unsigned char result = has_key_expired(&new_key, &prev_key);
+    assert(result == 0);
+}
+
+// Test case 11: Edge case - EX set to 0, PX set to a large value (not expired)
+void test_has_key_expired_ex_zero_px_large() {
+    struct timespec curr_time = {100, 0}; // 100 seconds
+    struct timespec prev_time = {50, 0};  // 50 seconds
+    KeyNode new_key = {"key1", &curr_time, 0, 0, 4};
+    KeyNode prev_key = {"key1", &prev_time, 0, 1000000, 4}; // EX = 0, PX = 1000000 milliseconds
+
+    unsigned char result = has_key_expired(&new_key, &prev_key);
+    assert(result == 0);
+}
+
+// Test case 12: Edge case - EX set to a large value, PX set to 0 (not expired)
+void test_has_key_expired_ex_large_px_zero() {
+    struct timespec curr_time = {100, 0}; // 100 seconds
+    struct timespec prev_time = {50, 0};  // 50 seconds
+    KeyNode new_key = {"key1", &curr_time, 0, 0, 4};
+    KeyNode prev_key = {"key1", &prev_time, 1000, 0, 4}; // EX = 1000 seconds, PX = 0
+
+    unsigned char result = has_key_expired(&new_key, &prev_key);
+    assert(result == 0);
+}
+
+// Test case 13: Key has not expired (EX set, time not exceeded) - use of nanosec
+void test_has_key_expired_ex_not_expired_nano_sec() {
+    struct timespec curr_time = {100, 125648519}; // 100 seconds
+    struct timespec prev_time = {50,  987654321};  // 50 seconds
+    KeyNode new_key = {"key1", &curr_time, 0, 0, 4};
+    KeyNode prev_key = {"key1", &prev_time, 60, 0, 4}; // EX = 60 seconds
+
+    unsigned char result = has_key_expired(&new_key, &prev_key);
+    assert(result == 0);
+}
+// Test case 2: Key has expired (EX set, time exceeded) - use of nanosec
+void test_has_key_expired_ex_expired_nano_sec() {
+    struct timespec curr_time = {200, 123456789}; // 200 seconds
+    struct timespec prev_time = {50, 987654321};  // 50 seconds
+    KeyNode new_key = {"key1", &curr_time, 0, 0, 4};
+    KeyNode prev_key = {"key1", &prev_time, 60, 0, 4}; // EX = 60 seconds
+
+    unsigned char result = has_key_expired(&new_key, &prev_key);
+    assert(result == 1);
+}
+
 int main() {
     test_is_set_option_valid();
     test_handle_set_options_valid();
@@ -1812,6 +1961,22 @@ int main() {
     test_execute_set_ex_px_exat_pxat_invalid_option();
     test_execute_set_ex_px_exat_pxat_null_parsed_cmd();
     test_execute_set_ex_px_exat_pxat_null_option_or_time();
+
+    // has_key_expired
+    test_has_key_expired_ex_not_expired();
+    test_has_key_expired_ex_expired();
+    test_has_key_expired_px_not_expired();
+    test_has_key_expired_px_expired();
+    test_has_key_expired_no_expiration();
+    test_has_key_expired_ex_and_px_ex_not_expired();
+    test_has_key_expired_ex_and_px_ex_expired();
+    test_has_key_expired_ex_and_px_px_not_expired();
+    test_has_key_expired_ex_and_px_px_expired();
+    test_has_key_expired_ex_zero_px_zero();
+    test_has_key_expired_ex_zero_px_large();
+    test_has_key_expired_ex_large_px_zero();
+    test_has_key_expired_ex_not_expired_nano_sec();
+    test_has_key_expired_ex_expired_nano_sec();
     puts("All tests passed");
     return 0;
 }

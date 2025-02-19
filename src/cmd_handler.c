@@ -61,11 +61,14 @@ handle_get_cmd(const void* gnode, SimpleMap* sm){
         clean_up_kv(key,NULL);
         return rtn;
     }
-    if(!kvp->value){
+    if(!kvp->value || !kvp->key){
         clean_up_kv(key,NULL);
         free(kvp);
         return NULL;
     }
+   
+
+
     switch (((ValueNode*)kvp->value)->dtype){
         case BULK_STR:
             from_val_nd_str_to_str((ValueNodeString*) kvp->value, &rtn);
@@ -79,6 +82,30 @@ handle_get_cmd(const void* gnode, SimpleMap* sm){
     }
 
 };
+unsigned char
+has_key_expired(KeyNode* new_key, KeyNode* prev_key){
+    unsigned int ex, px;
+    ex = prev_key->ex;
+    px = prev_key->px;
+    if(!ex && !px){
+        return 0;
+    }
+    struct timespec* curr_time, *prev_time;
+    float curr_t_sec, prev_t_sec, delta_sec;
+    curr_time  = new_key->input_time;
+    prev_time  = prev_key->input_time;
+    curr_t_sec = curr_time->tv_sec + curr_time->tv_nsec/1e9;
+    prev_t_sec = prev_time->tv_sec + prev_time->tv_nsec/1e9;
+    delta_sec  = curr_t_sec - prev_t_sec;
+    //time in seconds
+    if(ex){
+        return delta_sec>ex?1:0;
+    }else{
+        //time in miliseconds
+        return delta_sec*1000>px?1:0;
+    }
+}
+
 unsigned char
 is_get_cmd_valid(const void* gnode){
     BulkStringNode* blk_s_nd = (BulkStringNode*)gnode;
@@ -165,10 +192,7 @@ handle_set_cmd(void* node, SimpleMap* sm){
 
 
 KeyNode*
-create_key_node(char* content,
-                unsigned int ex,
-                unsigned int px,
-                int size){
+create_key_node(char* content, unsigned int ex, unsigned int px, int size){
     if(!content || size<1){
         return NULL;
     }

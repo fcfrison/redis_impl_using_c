@@ -65,4 +65,5 @@ char*         execute_set_nxxx_get(SimpleMap* sm, KeyValuePair* kvp, GenericNode
 char*         handle_get_cmd(const void* gnode, SimpleMap* sm);
 unsigned char is_get_cmd_valid(const void* gnode);
 char* execute_set_ex_px_exat_pxat(SimpleMap* sm, KeyValuePair* kvp, GenericNode** parsed_cmd);
+unsigned char has_key_expired(KeyNode* new_key, KeyNode* prev_key);
 #endif 
