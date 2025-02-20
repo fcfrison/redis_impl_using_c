@@ -66,8 +66,28 @@ handle_get_cmd(const void* gnode, SimpleMap* sm){
         free(kvp);
         return NULL;
     }
-   
-
+    if(has_key_expired(key,kvp->key)){
+        KeyValuePair removed_kvp;
+        switch(remove_key(sm,key,&compare,&removed_kvp)){
+            case REMOVE_ERROR:
+                clean_up_kv(key,NULL);
+                free(kvp);
+                return NULL;
+            case REMOVE_KEY_NOT_FOUND:
+                clean_up_kv(key,NULL);
+                free(kvp);
+                rtn = (char*)calloc(strlen(nil)+1,sizeof(char));
+                strcpy(rtn,nil);
+                return rtn;
+            case REMOVE_SUCCESS:
+                clean_up_kv(key,NULL);
+                clean_up_kv(removed_kvp.key,removed_kvp.value);
+                free(kvp);
+                rtn = (char*)calloc(strlen(nil)+1,sizeof(char));
+                strcpy(rtn,nil);
+                return rtn;
+        }
+    };
 
     switch (((ValueNode*)kvp->value)->dtype){
         case BULK_STR:
@@ -104,7 +124,7 @@ has_key_expired(KeyNode* new_key, KeyNode* prev_key){
         //time in miliseconds
         return delta_sec*1000>px?1:0;
     }
-}
+};
 
 unsigned char
 is_get_cmd_valid(const void* gnode){

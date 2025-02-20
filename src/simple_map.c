@@ -10,20 +10,20 @@ create_key_val_pair(void* key, void* value){
     return kvp;
 }
 
-KeyValuePair*
+int
 remove_key(SimpleMap* sm,
            void* key,
            void*(cmp_fptr)(const void* a, const void* b),
            KeyValuePair* rmv_pair){
     if(!sm       || !key || !cmp_fptr || !rmv_pair ||
        !sm->keys || !sm->values){
-        return NULL;
+        return REMOVE_ERROR;
     }
     int i = 0;
     void* rmv_key = NULL, *rmv_value = NULL; 
     while(i<=sm->top){
         if(!sm->keys[i]){
-            return NULL;
+            return REMOVE_ERROR;
         }
         rmv_key = sm->keys[i]->key;
         if(!cmp_fptr(key,rmv_key)){
@@ -38,14 +38,14 @@ remove_key(SimpleMap* sm,
                 sm->top--;
                 rmv_pair->key   = rmv_key;
                 rmv_pair->value = rmv_value;
-                return rmv_pair;
+                return REMOVE_SUCCESS;
             }
             sm->keys[i] = sm->keys[i+1];
             sm->values[i] = sm->values[i+1];
             i++;
         }
     }
-    return NULL;
+    return REMOVE_KEY_NOT_FOUND;
 }
 /*
 
@@ -173,11 +173,11 @@ get(SimpleMap* sm, void* key, void*(cmp_fptr)(const void* a, const void* b)){
         case KEY_ARR_ERROR:
             return NULL;
         default:
-            KeyValuePair* kv = (KeyValuePair*)calloc(1,sizeof(KeyValuePair));
-            if(!kv) return NULL;
-            kv->key   = sm->keys[pos]->key;
-            kv->value = sm->values[pos]->value; 
-            return kv;
+            KeyValuePair* kvp = (KeyValuePair*)calloc(1,sizeof(KeyValuePair));
+            if(!kvp) return NULL;
+            kvp->key   = sm->keys[pos]->key;
+            kvp->value = sm->values[pos]->value; 
+            return kvp;
     }
 }
 int

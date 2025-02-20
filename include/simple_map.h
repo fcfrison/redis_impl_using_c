@@ -31,8 +31,13 @@ enum SetKeyValueRtn{
     SUCESS_SET       =  1,
     SUCESS_UPGRADE   =  2
 };
+enum RemoveItemState{
+    REMOVE_ERROR,
+    REMOVE_SUCCESS,
+    REMOVE_KEY_NOT_FOUND
+};
+int remove_key(SimpleMap* sm, void* key, void*(cmp_fptr)(const void* a, const void* b), KeyValuePair* rmv_pair);
 KeyValuePair* create_key_val_pair(void* key, void* value);
-KeyValuePair* remove_key(SimpleMap* sm, void* key, void*(cmp_fptr)(const void* a, const void* b), KeyValuePair* rmv_pair);
 
 unsigned char __is_full(SimpleMap* sm);
 SimpleMap*    __double_arrays(SimpleMap* sm);

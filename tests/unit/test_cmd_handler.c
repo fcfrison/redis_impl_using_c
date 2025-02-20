@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include<unistd.h>
 #include "../include/cmd_handler.h"
 #include "../include/protocol.h"
 #include "../include/simple_map.h"
@@ -1556,10 +1557,77 @@ void test_handle_get_cmd_null_sm() {
 
     free(blk_s_nd->content);
     free(blk_s_nd);
+};
+
+void test_handle_get_cmd_key_has_expired() {
+    SimpleMap* sm            = create_simple_map();
+    KeyNode* key             = create_key_node("test_key", 1, 0, strlen("test_key"));
+    ValueNode* value         = create_value_node_string("test_value", BULK_STR, strlen("test_value"));
+    KeyValuePair* kvp        = create_key_val_pair(key, value);
+    set(sm,kvp,&compare);
+    sleep(5);
+    BulkStringNode* blk_s_nd = create_bulk_string_node("test_key",NULL);
+    char* result = handle_get_cmd(blk_s_nd, sm);
+    assert(result != NULL); // Ensure result is not NULL for valid bulk string
+    assert(strcmp(result, "$-1\r\n") == 0); // Ensure the correct response message
+    assert(sm->keys[0]==NULL);
+    assert(sm->values[0]==NULL);
+    free(result);
+    free(sm->keys);
+    free(sm->values);
+    free(sm);
+    free(blk_s_nd->content);
+    free(blk_s_nd);
 }
+void test_handle_get_cmd_key_has_not_expired() {
+    SimpleMap* sm      = create_simple_map();
+    KeyNode* key       = create_key_node("test_key", 100, 0, strlen("test_key"));
+    ValueNode* value   = create_value_node_string("test_value", BULK_STR, strlen("test_value"));
+    KeyValuePair* kvp  = create_key_val_pair(key, value);
+    set(sm,kvp,&compare);
+    sleep(1);
+    BulkStringNode* blk_s_nd = create_bulk_string_node("test_key",NULL);
+    char* result = handle_get_cmd(blk_s_nd, sm);
+    assert(result != NULL); // Ensure result is not NULL for valid bulk string
+    assert(strcmp(result, "$10\r\ntest_value\r\n") == 0); // Ensure the correct response message
+    assert(sm->keys[0]!=NULL);
+    assert(sm->values[0]!=NULL);
+    free(result);
+    free(sm->keys[0]);
+    free(sm->values[0]);
+    free(sm->keys);
+    free(sm->values);
+    free(sm);
+    free(blk_s_nd->content);
+    free(blk_s_nd);
+}
+void test_handle_get_cmd_key_has_expired_reinsert_data() {
+    SimpleMap* sm            = create_simple_map();
+    KeyNode* key             = create_key_node("test_key", 1, 0, strlen("test_key"));
+    ValueNode* value         = create_value_node_string("test_value", BULK_STR, strlen("test_value"));
+    KeyValuePair* kvp        = create_key_val_pair(key, value);
+    set(sm,kvp,&compare);
+    sleep(3);
+    BulkStringNode* blk_s_nd = create_bulk_string_node("test_key",NULL);
+    char* result = handle_get_cmd(blk_s_nd, sm);
 
-
-
+    key   = create_key_node("test_key", 100, 0, strlen("test_key"));
+    value = create_value_node_string("test_value", BULK_STR, strlen("test_value"));
+    kvp        = create_key_val_pair(key, value);
+    set(sm,kvp,&compare);
+    assert(result != NULL); // Ensure result is not NULL for valid bulk string
+    assert(strcmp(result, "$-1\r\n") == 0); // Ensure the correct response message
+    assert(sm->keys[0]!=NULL);
+    assert(sm->values[0]!=NULL);
+    free(result);
+    free(sm->keys[0]);
+    free(sm->values[0]);
+    free(sm->keys);
+    free(sm->values);
+    free(sm);
+    free(blk_s_nd->content);
+    free(blk_s_nd);
+}
 void test_execute_set_ex_px_exat_pxat_valid_ex() {
     SimpleMap* sm = create_simple_map();
     KeyNode* key = create_key_node("test_key", 0, 0, strlen("test_key"));
@@ -1954,6 +2022,9 @@ int main() {
     test_handle_get_cmd_key_not_found();
     test_handle_get_cmd_invalid_gnode();
     test_handle_get_cmd_null_sm();
+    test_handle_get_cmd_key_has_expired();
+    test_handle_get_cmd_key_has_not_expired();
+    test_handle_get_cmd_key_has_expired_reinsert_data();
     
     // execute_set_ex_px_exat_pxat
     test_execute_set_ex_px_exat_pxat_valid_ex();
