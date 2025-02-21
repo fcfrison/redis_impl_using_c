@@ -15,7 +15,7 @@ TEST_EXECUTABLE := tests
 
 # Source files
 SRC_FILES := $(wildcard $(SRC)/*.c)
-TEST_FILES := $(TESTS)/unit/test_cmd_handler.c
+TEST_FILES := $(TESTS)/unit/test_util.c
 
 # Main target
 all: $(BIN)/$(EXECUTABLE)

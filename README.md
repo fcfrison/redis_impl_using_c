@@ -23,6 +23,9 @@ https://www.geeksforgeeks.org/function-pointer-in-c/
 ### recv - set timeout
 https://stackoverflow.com/questions/2876024/linux-is-there-a-read-or-recv-from-socket-with-timeout
 
+### cli parsing in C
+https://thelinuxcode.com/getopt-3-c-function/
+
 ## Project design considerations
 ### SET command parser
 The SET command validation accepts requests that respect the syntax:

@@ -559,7 +559,7 @@ start_server(void*  (*fptr)(void*),
     ThreadFunc* th_exd_tm_mgr = init_th_excd_tm_q_mgr(excd_tm_q,excd_tm_mtx,excd_tm_sem);
     create_thread((void*)th_exd_tm_mgr);
     create_workers_pool(req_q_mtx, req_q, req_q_sem,fptr,max_app_workers,recv_timeout);
-	server_fd = get_server_sock("6379",maxpending);
+	server_fd = get_server_sock("6479",maxpending);
 	if (server_fd == -1) {
 		printf("Socket creation failed: %s...\n", strerror(errno));
 		return;

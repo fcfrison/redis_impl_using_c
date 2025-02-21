@@ -18,7 +18,9 @@ void  __validate_px_ex_content(BulkStringNode* node, char* state);
 OptionType get_option_type(const char* option);
 
 char*
-parse_command(void* node, SimpleMap* sm){
+parse_command(void* node, CmdParserArgs* args){
+    SimpleMap* sm = args->sm;
+    SimpleMap* cfg_dict = args->config_dict;
     GenericNode* gnode = (GenericNode*) node;
     unsigned char first_array = 0;
     while(gnode){

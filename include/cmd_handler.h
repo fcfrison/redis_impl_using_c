@@ -6,7 +6,7 @@
 typedef struct KeyNode KeyNode;
 typedef struct ValueNode ValueNode;
 typedef struct ValueNodeString ValueNodeString;
-
+typedef struct CmdParserArgs CmdParserArgs; 
 
 struct KeyNode{
     char*            content;
@@ -44,10 +44,16 @@ typedef enum {
     OPTION_INVALID
 } OptionType;
 
+struct CmdParserArgs{
+    SimpleMap* sm;
+    SimpleMap* config_dict;
+};
+
+
 char*         handle_echo_cmd(void* fst_nod);
 ValueNode*    create_value_node(GenericNode* gnode);
 void*         compare(const void* a, const void* b);
-char*         parse_command(void* node, SimpleMap* sm);
+char*         parse_command(void* node, CmdParserArgs* args);
 char*         __handle_echo_cmd(void* node, int* size);
 char*         handle_set_cmd(void* node, SimpleMap* sm);
 unsigned char is_set_option_valid(char* state, char bit_pos);

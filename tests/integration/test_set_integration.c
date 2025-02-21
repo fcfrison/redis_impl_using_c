@@ -6,7 +6,7 @@
 #include <assert.h>
 
 #define SERVER_IP "127.0.0.1"
-#define PORT 6379
+#define PORT 6479
 #define BUFFER_SIZE 1024
 
 void send_command(int sock, const char* command) {

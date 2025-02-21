@@ -13,15 +13,17 @@
 #include "../include/errors.h"
 #include "../include/queue.h"
 #include "../include/simple_map.h"
+#include "../include/app.h"
 
 SimpleMap* sm;
+SimpleMap* config_dict;
 void*
 app_code(void* arg){
     int* fd_ptr = (int*)arg;
     int  fd     = *fd_ptr;
     int  rtn_v;
     char buff, *rtn_s, *msg;
-
+    CmdParserArgs args = {sm, config_dict};
     ssize_t rtn;
     while(1){
         rtn_s = NULL;
@@ -43,7 +45,7 @@ app_code(void* arg){
                 }
                 if(array){
                     print_array(array,0);
-                    rtn_s = parse_command(array, sm);
+                    rtn_s = parse_command(array, &args);
                 }
                 if(!rtn_s){
                     msg = "An error occured while parsing the command.";
@@ -70,7 +72,8 @@ app_code(void* arg){
 	}
     return NULL;
 }
-int main(){
-    sm = create_simple_map();
+
+int main(int argc, char** argv){
+    setup(argc, argv, &sm, &config_dict);
     start_server(&app_code, 10, 500, 2, 0);
-}
+};
