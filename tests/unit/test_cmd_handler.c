@@ -1919,6 +1919,78 @@ void test_has_key_expired_ex_expired_nano_sec() {
     assert(result == 1);
 }
 
+
+// Test case 1: Exact match for "ECHO" command
+void test_find_redis_cmd_echo() {
+    char* cmd = "ECHO";
+    RedisCommand result = find_redis_cmd(cmd);
+    assert(result == ECHO); // Expect ECHO
+}
+
+// Test case 2: Exact match for "SET" command
+void test_find_redis_cmd_set() {
+    char* cmd = "SET";
+    RedisCommand result = find_redis_cmd(cmd);
+    assert(result == SET); // Expect SET
+}
+
+// Test case 3: Exact match for "GET" command
+void test_find_redis_cmd_get() {
+    char* cmd = "GET";
+    RedisCommand result = find_redis_cmd(cmd);
+    assert(result == GET); // Expect GET
+}
+
+// Test case 4: Exact match for "CONFIG" command
+void test_find_redis_cmd_config() {
+    char* cmd = "CONFIG";
+    RedisCommand result = find_redis_cmd(cmd);
+    assert(result == CONFIG); // Expect CONFIG
+}
+
+// Test case 5: No match for an unknown command
+void test_find_redis_cmd_unknown() {
+    char* cmd = "UNKNOWN";
+    RedisCommand result = find_redis_cmd(cmd);
+    assert(result == NULL_CMD); // Expect NULL_CMD
+}
+
+// Test case 6: Case-insensitive match for "echo" (lowercase)
+void test_find_redis_cmd_case_insensitive() {
+    char* cmd = "echo";
+    RedisCommand result = find_redis_cmd(cmd);
+    assert(result == ECHO); // Expect ECHO (case-insensitive match)
+}
+
+// Test case 7: Partial match (should not match)
+void test_find_redis_cmd_partial_match() {
+    char* cmd = "SETT";
+    RedisCommand result = find_redis_cmd(cmd);
+    assert(result == NULL_CMD); // Expect NULL_CMD (no partial match)
+}
+
+// Test case 8: NULL command string (should return NULL_CMD)
+void test_find_redis_cmd_null_cmd() {
+    char* cmd = NULL;
+    RedisCommand result = find_redis_cmd(cmd);
+    assert(result == NULL_CMD); // Expect NULL_CMD
+}
+
+// Test case 9: Empty command string (should return NULL_CMD)
+void test_find_redis_cmd_empty_cmd() {
+    char* cmd = "";
+    RedisCommand result = find_redis_cmd(cmd);
+    assert(result == NULL_CMD); // Expect NULL_CMD
+}
+
+// Test case 10: Match error in does_the_strings_matches (should return NULL_CMD)
+void test_find_redis_cmd_match_error() {
+    char* cmd = "ERROR"; // Assuming "ERROR" causes a match error
+    RedisCommand result = find_redis_cmd(cmd);
+    assert(result == NULL_CMD); // Expect NULL_CMD due to match error
+}
+
+
 int main() {
     test_is_set_option_valid();
     test_handle_set_options_valid();
@@ -2048,6 +2120,18 @@ int main() {
     test_has_key_expired_ex_large_px_zero();
     test_has_key_expired_ex_not_expired_nano_sec();
     test_has_key_expired_ex_expired_nano_sec();
+
+    //find_redis
+    test_find_redis_cmd_echo();
+    test_find_redis_cmd_set();
+    test_find_redis_cmd_get();
+    test_find_redis_cmd_config();
+    test_find_redis_cmd_unknown();
+    test_find_redis_cmd_case_insensitive();
+    test_find_redis_cmd_partial_match();
+    test_find_redis_cmd_null_cmd();
+    test_find_redis_cmd_empty_cmd();
+    test_find_redis_cmd_match_error();
     puts("All tests passed");
     return 0;
 }
