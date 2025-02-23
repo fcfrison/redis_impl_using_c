@@ -31,13 +31,21 @@ parse_command(void* node, CmdParserArgs* args){
                 break;
             case BULK_STR:
                 BulkStringNode* temp = (BulkStringNode*) gnode;
-                if(!strcmp(temp->content,"ECHO") && first_array==1){
-                    return handle_echo_cmd(temp->node->next);
-                }else if(!strcmp(temp->content,"SET") && first_array==1){
-                    return handle_set_cmd(temp->node->next,sm);
-                }else if(!strcmp(temp->content,"GET") && first_array==1){
-                    return handle_get_cmd(temp->node->next,sm);
-                }return NULL;
+                if(first_array==1){
+                    switch (find_redis_cmd(temp->content)){
+                        case ECHO:
+                            return handle_echo_cmd(temp->node->next);
+                        case SET:
+                            return handle_set_cmd(temp->node->next,sm);
+                        case GET:
+                            return handle_get_cmd(temp->node->next,sm);
+                        case CONFIG:
+                            return handle_conf_cmd(temp->node->next,cfg_dict);
+                        default:
+                            return NULL;
+                        }
+                }
+                return NULL;
             default:
                 return NULL;
         }
@@ -46,8 +54,31 @@ parse_command(void* node, CmdParserArgs* args){
 }
 
 char*
+handle_conf_cmd(GenericNode* gnode, SimpleMap* config_dict){
+    return NULL;
+};
+RedisCommand
+find_redis_cmd(char* cmd){
+    unsigned char i = 0;
+    for (CommandEntry item = command_table[i]; item.name; item = command_table[i++]){
+        MatchErrorState state = does_the_strings_matches(item.name,cmd);
+        switch(state){
+            case MATCH:
+                return item.cmd;
+            case MATCH_ERROR:
+                return NULL_CMD;
+            default:
+                continue;
+        }
+    }
+    return NULL_CMD;
+}
+
+
+
+char*
 handle_get_cmd(const void* gnode, SimpleMap* sm){
-    if(!is_get_cmd_valid(gnode)){
+    if(!is_cmd_valid(gnode)){
         return NULL;
     }
     char* rtn = NULL, *nil="$-1\r\n";
@@ -129,7 +160,7 @@ has_key_expired(KeyNode* new_key, KeyNode* prev_key){
 };
 
 unsigned char
-is_get_cmd_valid(const void* gnode){
+is_cmd_valid(const void* gnode){
     BulkStringNode* blk_s_nd = (BulkStringNode*)gnode;
     if(!blk_s_nd || !blk_s_nd->content || blk_s_nd->size<0){
         return 0;

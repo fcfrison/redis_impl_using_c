@@ -37,7 +37,7 @@ app_code(void* arg){
         }
         switch (buff){
             case '*':
-                ArrayNode* array = parse_array(fd);
+                ArrayNode* array = lexer(fd);
                 if(!array){
                    msg = "An error occured while parsing the command.";
                     send_resp_to_clnt(msg,strlen(msg)+1, fd,3,500);
@@ -68,7 +68,6 @@ app_code(void* arg){
             default:
                 break;
         }
-
 	}
     return NULL;
 }

@@ -53,7 +53,7 @@ struct BulkStringNode{
 
 
 
-ArrayNode* parse_array(int fd);
+ArrayNode* lexer(int fd);
 BulkStringNode* parse_bulk_str(int fd);
 void delete_array(void* el, int lp_bck);
 #endif

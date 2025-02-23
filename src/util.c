@@ -5,6 +5,7 @@
 #include <errno.h>
 #include <errors.h>
 #include <getopt.h>
+#include <fnmatch.h>
 #include "../include/util.h"
 #include "../include/protocol.h"
 #include "../include/cmd_handler.h"
@@ -170,10 +171,29 @@ setup(int argc, char** argv, SimpleMap** sm, SimpleMap** config_dict){
         strcpy(key,keys[i]);
         kvp = create_key_val_pair(key,values[i]);
         if(set(*config_dict, kvp, &compare_str)!=SUCESS_SET){
-            exit(ERROR_FATAL);
+            exit(EXIT_FAILURE);
         }
         free(kvp);
     }
     return;
 };
-
+/**
+ int
+ does_the_strings_matches(char* pattern, char* target){
+     if(!pattern || !target){
+         return MATCH_ERROR;
+     };
+     const int FNM_IGNORECASE = 1 << 4; //the original const wasn't recognized by the compiler
+     return fnmatch(pattern,target,FNM_IGNORECASE);
+     
+ }
+ * 
+ */
+MatchErrorState
+does_the_strings_matches(const char* pattern, const char* target){
+    if(!pattern || !target){
+        return MATCH_ERROR;
+    };
+    const int FNM_IGNORECASE = 1 << 4; //the original const wasn't recognized by the compiler
+    return fnmatch(pattern,target,FNM_IGNORECASE)==MATCH?MATCH:NO_MATCH;
+}

@@ -11,11 +11,11 @@ ArrayNode* new_array(void* content, void* next, void* prev, int size);
 int  is_valid_terminator(int fd);
 int  get_el_size(int fd);
 int read_exact_bytes(int fd, char* buf, size_t len);
-BulkStringNode* parse_bulk_str(int fd);
+BulkStringNode* lex_bulk_str(int fd);
 
 
 ArrayNode*
-parse_array(int fd){
+lexer(int fd){
     // this parsing assumes perfectly crafted strings
     int arr_size = get_el_size(fd);
     char next_char;
@@ -46,10 +46,10 @@ parse_array(int fd){
         };
         switch (next_char){
             case DOLLAR_BYTE:
-                current = parse_bulk_str(fd);
+                current = lex_bulk_str(fd);
                 break;
             case ASTERISK_BYTE:
-                current = parse_array(fd);
+                current = lexer(fd);
                 break;
             case PLUS_BYTE:
                 /* code */
@@ -77,7 +77,7 @@ parse_array(int fd){
 };
 
 BulkStringNode* 
-parse_bulk_str(int fd){
+lex_bulk_str(int fd){
     int rtn = 0;
     int  str_size = get_el_size(fd);
     if(str_size==ERR_ARRAY_OVERFLOW || str_size==ERR_INV_CHAR){

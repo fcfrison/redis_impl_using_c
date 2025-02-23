@@ -153,6 +153,64 @@ void test_cli_parser_missing_dbfilename_value() {
     // Restore stderr
     freopen("/dev/tty", "w", stderr);
 }
+void test_does_the_strings_matches_match() {
+    const char* pattern = "hello*";
+    const char* target = "HELLOworld";
+    MatchErrorState result = does_the_strings_matches(pattern, target);
+    assert(result == MATCH); // Expect MATCH
+}
+
+// Test case 2: Pattern does not match target
+void test_does_the_strings_matches_no_match() {
+    const char* pattern = "hello*";
+    const char* target = "worldHELLO";
+    MatchErrorState result = does_the_strings_matches(pattern, target);
+    assert(result == NO_MATCH); // Expect NO_MATCH
+}
+
+// Test case 3: Pattern is NULL (should return MATCH_ERROR)
+void test_does_the_strings_matches_null_pattern() {
+    const char* target = "HELLOworld";
+    MatchErrorState result = does_the_strings_matches(NULL, target);
+    assert(result == MATCH_ERROR); // Expect MATCH_ERROR
+}
+
+// Test case 4: Target is NULL (should return MATCH_ERROR)
+void test_does_the_strings_matches_null_target() {
+    const char* pattern = "hello*";
+    MatchErrorState result = does_the_strings_matches(pattern, NULL);
+    assert(result == MATCH_ERROR); // Expect MATCH_ERROR
+}
+
+// Test case 5: Both pattern and target are NULL (should return MATCH_ERROR)
+void test_does_the_strings_matches_null_both() {
+    MatchErrorState result = does_the_strings_matches(NULL, NULL);
+    assert(result == MATCH_ERROR); // Expect MATCH_ERROR
+}
+
+// Test case 6: Exact match (case-insensitive)
+void test_does_the_strings_matches_exact_match() {
+    const char* pattern = "HELLO";
+    const char* target = "hello";
+    MatchErrorState result = does_the_strings_matches(pattern, target);
+    assert(result == MATCH); // Expect MATCH
+}
+
+// Test case 7: Wildcard match (case-insensitive)
+void test_does_the_strings_matches_wildcard_match() {
+    const char* pattern = "h*o";
+    const char* target = "HELLO";
+    MatchErrorState result = does_the_strings_matches(pattern, target);
+    assert(result == MATCH); // Expect MATCH
+}
+
+// Test case 8: Wildcard no match (case-insensitive)
+void test_does_the_strings_matches_wildcard_no_match() {
+    const char* pattern = "h*o";
+    const char* target = "WORLD";
+    MatchErrorState result = does_the_strings_matches(pattern, target);
+    assert(result == NO_MATCH); // Expect NO_MATCH
+}
 int main() {
     test_cli_parser_no_arguments();
     test_cli_parser_with_dir_argument();
@@ -160,6 +218,15 @@ int main() {
     test_cli_parser_with_both_arguments();
     test_cli_parser_invalid_argument();
     test_cli_parser_missing_dbfilename_value();
+
+    test_does_the_strings_matches_match();
+    test_does_the_strings_matches_no_match();
+    test_does_the_strings_matches_null_pattern();
+    test_does_the_strings_matches_null_target();
+    test_does_the_strings_matches_null_both();
+    test_does_the_strings_matches_exact_match();
+    test_does_the_strings_matches_wildcard_match();
+    test_does_the_strings_matches_wildcard_no_match();
     printf("All tests passed!\n");
     return 0;
 }
