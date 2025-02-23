@@ -3,6 +3,7 @@
 #include <string.h>
 #include <time.h>
 #include <sys/time.h>
+#include <errno.h>
 #include "../include/protocol.h"
 #include "../include/simple_map.h"
 #include "../include/cmd_handler.h"
@@ -19,6 +20,10 @@ OptionType get_option_type(const char* option);
 
 char*
 parse_command(void* node, CmdParserArgs* args){
+    if(!node || !args->config_dict || !args->sm){
+        errno = EINVAL;
+        return NULL;
+    }
     SimpleMap* sm = args->sm;
     SimpleMap* cfg_dict = args->config_dict;
     GenericNode* gnode = (GenericNode*) node;
@@ -53,8 +58,51 @@ parse_command(void* node, CmdParserArgs* args){
     return NULL;
 }
 
+typedef enum{
+    CONF_GET,
+    CONF_SET,
+    INVALID_CONF_OPTION
+}ConfigCmdOptions;
+
+typedef struct{
+    char* conf_cmd_option_name;
+    ConfigCmdOptions conf_cmd_option;
+} ConfigCmdOptionsStruct;
+
+ConfigCmdOptionsStruct config_cmd_options[] = {
+    {"GET",CONF_GET},
+    {"SET",CONF_SET},
+    {NULL,INVALID_CONF_OPTION}
+};
+
+//TODO: continue from here
 char*
 handle_conf_cmd(GenericNode* gnode, SimpleMap* config_dict){
+    if(!gnode               ||  gnode->node->type!=BULK_STR ||
+       !config_dict         || !config_dict->keys           ||
+       !config_dict->values){
+        return NULL;
+    };
+    BulkStringNode* str_node = (BulkStringNode*) gnode;
+    char* cmd = str_node->content;
+    if(!cmd){
+        return NULL;
+    };
+    unsigned char i = 0;
+    ConfigCmdOptionsStruct item;
+    for (item = config_cmd_options[i]; item.conf_cmd_option_name; config_cmd_options[i++]){
+        switch(does_the_strings_matches(item.conf_cmd_option_name, cmd)){
+            case MATCH:
+                /* found it */
+                break;
+            case MATCH_ERROR:
+                return NULL;            
+            default:
+                continue;;
+        }
+        
+    }
+    
     return NULL;
 };
 RedisCommand
