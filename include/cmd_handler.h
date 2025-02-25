@@ -3,27 +3,56 @@
 #include "simple_map.h"
 #include "protocol.h"
 
-typedef struct KeyNode KeyNode;
-typedef struct ValueNode ValueNode;
-typedef struct ValueNodeString ValueNodeString;
-typedef struct CmdParserArgs CmdParserArgs; 
-
-struct KeyNode{
+typedef struct {
     char*            content;
     struct timespec* input_time;
     unsigned int     ex;
     unsigned int     px;
     int              size;
-};
-struct ValueNode{
+}KeyNode;
+
+typedef struct{
     void*       content;
     RedisDtype  dtype;
-};
-struct ValueNodeString{
+}ValueNode;
+
+typedef struct {
     char*      content;
     RedisDtype dtype;
     int        size;
-};
+}ValueNodeString;
+
+typedef struct{
+    SimpleMap* sm;
+    SimpleMap* config_dict;
+}CmdParserArgs;
+
+typedef enum {
+    NULL_CMD = -1,
+    ECHO     =  0,
+    SET      =  1,
+    GET      =  2,
+    CONFIG   =  3
+}RedisCommand;
+
+typedef enum{
+    CONF_GET,
+    CONF_SET,
+    INVALID_CONF_OPTION
+}ConfigCmdOptions;
+
+
+typedef struct {
+    const char *name;
+    RedisCommand cmd;
+} CommandEntry;
+
+typedef struct{
+    char* conf_cmd_option_name;
+    ConfigCmdOptions conf_cmd_option;
+} ConfigCmdOptionsStruct;
+
+
 enum SET_STATES{
     SET_BASIC                = 0b01110000, // 0111 0000
     SET_NXXX                 = 0b01111000, // 0111 1000
@@ -44,21 +73,6 @@ typedef enum {
     OPTION_INVALID
 } OptionType;
 
-struct CmdParserArgs{
-    SimpleMap* sm;
-    SimpleMap* config_dict;
-};
-typedef enum {
-    NULL_CMD = -1,
-    ECHO     =  0,
-    SET      =  1,
-    GET      =  2,
-    CONFIG   =  3
-}RedisCommand;
-typedef struct {
-    const char *name;
-    RedisCommand cmd;
-} CommandEntry;
 
 static const CommandEntry command_table[] = {
     {"ECHO",   ECHO},
@@ -66,6 +80,12 @@ static const CommandEntry command_table[] = {
     {"GET",    GET},
     {"CONFIG", CONFIG},
     {NULL,     NULL_CMD}  // End mark
+};
+
+static const ConfigCmdOptionsStruct config_cmd_options[] = {
+    {"GET",CONF_GET},
+    {"SET",CONF_SET},
+    {NULL,INVALID_CONF_OPTION}
 };
 
 char*         handle_echo_cmd(void* fst_nod);
@@ -88,8 +108,21 @@ char*         execute_set_nx_xx(SimpleMap* sm, KeyValuePair* kvp, GenericNode** 
 char*         execute_set_nxxx_get(SimpleMap* sm, KeyValuePair* kvp, GenericNode** parsed_cmd);
 char*         handle_get_cmd(const void* gnode, SimpleMap* sm);
 unsigned char is_cmd_valid(const void* gnode);
-char* execute_set_ex_px_exat_pxat(SimpleMap* sm, KeyValuePair* kvp, GenericNode** parsed_cmd);
+char*         execute_set_ex_px_exat_pxat(SimpleMap* sm, KeyValuePair* kvp, GenericNode** parsed_cmd);
 unsigned char has_key_expired(KeyNode* new_key, KeyNode* prev_key);
 RedisCommand  find_redis_cmd(char* cmd);
 char*         handle_conf_cmd(GenericNode* gnode, SimpleMap* config_dict);
+void
+insert_key_value_str_to_str_array(KeyValuePair* kvp, 
+                                  char**        value_array,
+                                  char**        key_array,
+                                  unsigned int* total_bytes_val_arr,
+                                  unsigned int* total_bytes_key_arr,
+                                  unsigned int* next_pos);
+char*
+generate_conf_get_response(char** keys,
+                            char** values,
+                            const unsigned int total_key_bytes,
+                            const unsigned int total_value_bytes,
+                            size_t num_elements);
 #endif 
