@@ -11,14 +11,15 @@ ArrayNode* new_array(void* content, void* next, void* prev, int size);
 int  is_valid_terminator(int fd);
 int  get_el_size(int fd);
 int read_exact_bytes(int fd, char* buf, size_t len);
-BulkStringNode* parse_bulk_str(int fd);
+BulkStringNode* lex_bulk_str(int fd);
 
 
 ArrayNode*
-parse_array(int fd){
+lexer(int fd){
     // this parsing assumes perfectly crafted strings
     int arr_size = get_el_size(fd);
     char next_char;
+    int rtn = 0;
     if(arr_size==-2){
         return NULL;
     }
@@ -38,16 +39,17 @@ parse_array(int fd){
     void*  previous  = NULL;
     while(inserted_el<(unsigned int)arr_size){
         void* current;
-        if(!read_exact_bytes(fd, &next_char,1)){
+        rtn = read_exact_bytes(fd, &next_char,1);
+        if(!rtn || rtn==-1){
             delete_array(previous,1);
             return NULL;
         };
         switch (next_char){
             case DOLLAR_BYTE:
-                current = parse_bulk_str(fd);
+                current = lex_bulk_str(fd);
                 break;
             case ASTERISK_BYTE:
-                current = parse_array(fd);
+                current = lexer(fd);
                 break;
             case PLUS_BYTE:
                 /* code */
@@ -75,7 +77,8 @@ parse_array(int fd){
 };
 
 BulkStringNode* 
-parse_bulk_str(int fd){
+lex_bulk_str(int fd){
+    int rtn = 0;
     int  str_size = get_el_size(fd);
     if(str_size==ERR_ARRAY_OVERFLOW || str_size==ERR_INV_CHAR){
         log_error("The string size is invalid.");
@@ -98,7 +101,8 @@ parse_bulk_str(int fd){
         return NULL;
     }
     char* buf = calloc(str_size+1,sizeof(char));
-    if(!read_exact_bytes(fd,buf,str_size)){
+    rtn = read_exact_bytes(fd,buf,str_size); 
+    if(!rtn || rtn==-1){
         free(buf);
         return NULL;
     }
@@ -169,10 +173,10 @@ int
 is_valid_terminator(int fd){
     char* next_char = calloc(1,sizeof(char));
     unsigned char state = 0;
-    ssize_t ret_val;
+    int rtn;
     while(1){
-        ret_val = read_exact_bytes(fd, next_char, 1);
-        if(!ret_val){
+        rtn = read_exact_bytes(fd, next_char, 1);
+        if(!rtn || rtn==-1){
             free(next_char);
             return 0;
         }

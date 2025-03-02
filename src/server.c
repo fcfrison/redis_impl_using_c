@@ -215,6 +215,9 @@ read_exact_bytes(int fd, char* buf, size_t len){
         log_error("connection closed by the client");
         return 0;
     }
+    if(rtn==-1){
+        return rtn;
+    }
     if((size_t)rtn < len){
         log_error("less bytes than the expected were received");
         return 0;
@@ -462,6 +465,7 @@ app_worker(void* _args){
             set_recv_tmout(rq->fd, args->recv_timeout, (suseconds_t)0);
             args->func((void*)&rq->fd);
             //app_code(rq->fd);
+            close(rq->fd);
             free(rq->ts);
             free(rq);
         }
@@ -555,7 +559,7 @@ start_server(void*  (*fptr)(void*),
     ThreadFunc* th_exd_tm_mgr = init_th_excd_tm_q_mgr(excd_tm_q,excd_tm_mtx,excd_tm_sem);
     create_thread((void*)th_exd_tm_mgr);
     create_workers_pool(req_q_mtx, req_q, req_q_sem,fptr,max_app_workers,recv_timeout);
-	server_fd = get_server_sock("6379",maxpending);
+	server_fd = get_server_sock("6479",maxpending);
 	if (server_fd == -1) {
 		printf("Socket creation failed: %s...\n", strerror(errno));
 		return;

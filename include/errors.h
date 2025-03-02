@@ -1,5 +1,5 @@
 #ifndef ERRORS_H
-
+#define ERRORS_H
 
 typedef struct SendErrorInfo SendErrorInfo;
 typedef struct RecvErrorInfo RecvErrorInfo;

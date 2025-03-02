@@ -66,18 +66,9 @@ int main() {
     };
     */
     char* cmd_str_a[] = {
-        "*2\r\n$4\r\nECHO\r\n$3\r\nhey\r\n",
-        "*2\r\n$4\r\nECHO\r\n$5\r\nhello\r\n",
-        "*2\r\n$4\r\nECHO\r\n$10\r\nredis-test\r\n",
-        "*2\r\n$4\r\nECHO\r\n$9\r\n123456789\r\n",
-        "*2\r\n$4\r\nECHO\r\n$0\r\n\r\n",
-        "*2\r\n$4\r\nECHO\r\n$13\r\nlonger-string\r\n",
-        "*2\r\n$4\r\nECHO\r\n$1\r\na\r\n",
-        "*2\r\n$4\r\nECHO\r\n$2\r\nok\r\n",
-        "*2\r\n$4\r\nECHO\r\n$6\r\ngoodbye\r\n",
-        "*2\r\n$4\r\nECHO\r\n$4\r\ntest\r\n"
+        "*5\r\n$3\r\nSET\r\n$10\r\nanotherkey\r\n$23\r\nwill expire in a minute\r\n$2\r\nEX\r\n$2\r\n60\r\n",
     };
-    unsigned char size = 10;
+    unsigned char size = 1;
     ssize_t rtn     = 0;
     for(unsigned char i=0;i<size;i++){
         size_t  b_to_send = strlen(cmd_str_a[i]);

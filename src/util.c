@@ -3,8 +3,13 @@
 #include <string.h>
 #include <time.h>
 #include <errno.h>
+#include <errors.h>
+#include <getopt.h>
+#include <fnmatch.h>
 #include "../include/util.h"
 #include "../include/protocol.h"
+#include "../include/cmd_handler.h"
+#include "../include/app.h"
 unsigned int
 string_to_uint(char* string){
     size_t size = strlen(string);
@@ -89,4 +94,109 @@ msleep(long msec,int max_retries){
         }
     }while(retries<max_retries);
     return res;
+}
+
+void 
+cli_parser(int    argc,
+           char** argv,
+           char** dir,
+           char** dbfilename,
+           char*  default_redis_dir,
+           char*  default_redis_rdbfile){
+    *dir = *dbfilename = NULL;
+    struct option options[] = {
+        {"dbfilename",required_argument, NULL, 'c'},
+        {"dir", required_argument, NULL,'d'},
+        {NULL, 0, NULL, 0}};
+    int opt;
+    //Reset optind
+    optind = 1; 
+    while((opt = getopt_long(argc, argv, "c:d:?",options, NULL)) != -1){
+        if(!optarg){
+            puts("Wrong syntax");
+            exit(EXIT_FAILURE);
+        };
+        switch (opt){
+            case 'c':
+                *dbfilename = optarg;
+                puts(*dbfilename);
+                break;
+            case 'd':
+                *dir = optarg;
+                puts(*dir);
+                break;
+            case '?':
+            default:
+                exit(EXIT_FAILURE);
+        };
+    };
+    if(!*dir){
+        *dir = (char*)calloc(strlen(default_redis_dir),sizeof(char));
+        strcpy(*dir,default_redis_dir);
+    };
+    if(!*dbfilename){
+        *dbfilename = (char*)calloc(strlen(default_redis_rdbfile),sizeof(char));
+        strcpy(*dbfilename,default_redis_rdbfile);
+    };
+    return;
+}
+void*
+compare_str(const void* key_a, const void* key_b){
+    if(!key_a || !key_b){
+        return NULL;
+    }
+    char* a = (char*) key_a;
+    char* b = (char*) key_b;
+    return strcmp(a,b)==0? a : NULL;
+}
+void
+setup(int argc, char** argv, SimpleMap** sm, SimpleMap** config_dict){
+    *sm = create_simple_map();
+    *config_dict = create_simple_map();
+    char* keys[2] = {"dir", "dbfilename"};
+    char* dir = NULL, *dbfilename = NULL;
+    char* values[2] = {dir,dbfilename};
+    size_t key_len;
+    KeyValuePair* kvp;
+    cli_parser(argc,
+               argv,
+               &values[0],
+               &values[1],
+               DEFAULT_REDIS_DIR,
+               DEFAULT_REDIS_RDBFILE);
+    
+    for (size_t i = 0; i < 2; i++){
+        key_len = strlen(keys[i])+1;
+        char* key = (char*)calloc(key_len,sizeof(char));
+        strcpy(key,keys[i]);
+        
+        kvp = create_key_val_pair(create_key_node(key, 0, 0, strlen(keys[i])),
+                                  create_value_node_string(values[i],BULK_STR,strlen(values[i]))
+                                );
+        if(set(*config_dict, kvp, &compare)!=SUCESS_SET){
+            exit(EXIT_FAILURE);
+        }
+        free(kvp);
+    }
+    return;
+};
+/**
+ int
+ does_the_strings_matches(char* pattern, char* target){
+     if(!pattern || !target){
+         return MATCH_ERROR;
+     };
+     const int FNM_IGNORECASE = 1 << 4; //the original const wasn't recognized by the compiler
+     return fnmatch(pattern,target,FNM_IGNORECASE);
+     
+ }
+ * 
+ */
+MatchErrorState
+does_the_strings_match(const char* pattern, const char* target){
+    if(!pattern || !target){
+        return MATCH_ERROR;
+    };
+    const int FNM_IGNORECASE = 1 << 4; //the original const wasn't recognized by the compiler
+    return fnmatch(pattern,target,FNM_IGNORECASE)==MATCH?MATCH:NO_MATCH;
 }
