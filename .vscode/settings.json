@@ -6,6 +6,7 @@
         "errors.h": "c",
         "server.h": "c",
         "cmd_handler.h": "c",
-        "queue.h": "c"
+        "queue.h": "c",
+        "getopt.h": "c"
     }
 }
