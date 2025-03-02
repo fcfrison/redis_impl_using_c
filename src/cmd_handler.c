@@ -20,8 +20,9 @@ void  cpy_str(const char* src, const size_t str_len, char** dest);
 int   key_or_value_node_to_string(const void* node, char** rtn_val, NodeType nt);
 void* __execute_set_check(SimpleMap* sm, KeyValuePair* kvp);
 void  __validate_px_ex_content(BulkStringNode* node, char* state);
-void* handle_conf_get(BulkStringNode* bnode, SimpleMap* config_dict);
 OptionType get_option_type(const char* option);
+unsigned int is_it_possible_to_insert_the_str_in_array(char**arr, size_t size, char* str);
+
 
 char*
 parse_command(void* node, CmdParserArgs* args){
@@ -80,7 +81,7 @@ handle_conf_cmd(GenericNode* gnode, SimpleMap* config_dict){
     unsigned char i = 0;
     ConfigCmdOptionsStruct item;
     for (item = config_cmd_options[i]; item.conf_cmd_option_name; item = config_cmd_options[i++]){
-        switch(does_the_strings_matches(item.conf_cmd_option_name, cmd)){
+        switch(does_the_strings_match(item.conf_cmd_option_name, cmd)){
             case MATCH:
                 if(item.conf_cmd_option==CONF_GET){
                     return handle_conf_get(gnode->node->next, config_dict);
@@ -97,12 +98,28 @@ handle_conf_cmd(GenericNode* gnode, SimpleMap* config_dict){
     }
     return NULL;
 };
-void*
+/**
+ * Retrieves configuration values from a config dictionary based on provided key(s)
+ *
+ * This function processes a CONF GET command in a REDIS server implementation. It searches
+ * the configuration dictionary for keys that match the provided bulk string nodes and constructs
+ * a response containing the matched key-value pairs.
+ *
+ * @param bnode A pointer to a BulkStringNode containing the configuration key(s) to retrieve.
+ *              Multiple keys can be provided as a linked list through the node's next pointers.
+ * @param config_dict A pointer to a SimpleMap containing the server's configuration key-value pairs.
+ *
+ * @return char* A pointer to a generated response string containing the matched configuration
+ *               key-value pairs. Returns NULL if no configuration keys were matched or if any of
+ *               the input parameters are invalid.
+ *
+ * The function will validate inputs, then iterate through each bulk string node, looking for
+ * matching keys in the configuration dictionary. For each match found, it stores the key-value
+ * pair in temporary arrays. Finally, it generates a formatted response containing all matched
+ * configuration entries.
+ */
+char*
 handle_conf_get(BulkStringNode* bnode, SimpleMap* config_dict){
-    // check the requirements for the first node
-    // if (CONF)-->(GET)-->(NULL), then null
-    // if (CONF)-->(GET)-->(BNODE->node==NULL), then null
-    // if (CONF)-->(GET)-->(BNODE->node->dtype!=BULK_STR), then null
     if(!bnode                       ||
        !bnode->node                 ||
        !config_dict                 ||
@@ -111,7 +128,6 @@ handle_conf_get(BulkStringNode* bnode, SimpleMap* config_dict){
         config_dict->top<0){
         return NULL;
     }
-    BulkStringNode* temp = bnode;
     unsigned int    possible_max_size = config_dict->top+1;
     char*           key_array[possible_max_size];
     char*           value_array[possible_max_size];
@@ -122,28 +138,41 @@ handle_conf_get(BulkStringNode* bnode, SimpleMap* config_dict){
     unsigned int nr_inserted_el      = 0;
     unsigned int total_bytes_key_arr = 0;
     unsigned int total_bytes_val_arr = 0;
+    SimpleMapWrapper smw;
     do{
-        if(temp->node->type!=BULK_STR){
-            temp = temp->node->next;
+        if(bnode->node->type!=BULK_STR){
+            bnode = bnode->node->next;
             continue;    
         };
-        key = create_key_node(temp->content, 0, 0, temp->size);
-        kvp = get(config_dict, key, &compare);
-        clean_up_kv(key,NULL);
-        if(!kvp){
-            temp = temp->node->next;
-            continue;
-        }
-        insert_key_value_str_to_str_array(kvp,
-                                          value_array,
-                                          key_array,
-                                          &total_bytes_val_arr,
-                                          &total_bytes_key_arr,
-                                          &nr_inserted_el);
-        temp = temp->node->next;
-        free(kvp);
-    }while(temp || !temp->node);
-    if(nr_inserted_el==0) return NULL;
+        init_simple_map_wrapper(config_dict,&smw);
+        while((kvp = smw.next(&smw))){
+            key = kvp->key;
+            if(!key){
+                free(kvp);
+                continue;
+            };
+            switch (does_the_strings_match(bnode->content, key->content)){
+                case MATCH:
+                    insert_key_value_str_to_str_array(kvp,
+                                                    value_array,
+                                                    key_array,
+                                                    &total_bytes_val_arr,
+                                                    &total_bytes_key_arr,
+                                                    &nr_inserted_el);
+                    free(kvp);
+                    break;
+                default:
+                    continue;
+                }
+        };
+        bnode = bnode->node->next;
+    }while(bnode && bnode->node);
+    if(nr_inserted_el==0){
+        char* empty_arr = "*0\r\n";
+        char* response = (char*)calloc(strlen(empty_arr)+1,sizeof(char));
+        strcpy(response,empty_arr);
+        return response;
+    }
     return generate_conf_get_response(key_array,
                                       value_array,
                                       total_bytes_key_arr,
@@ -158,9 +187,9 @@ generate_conf_get_response(char** keys,
                            const unsigned int total_key_bytes,
                            const unsigned int total_value_bytes,
                            size_t num_elements) {
-    
+    size_t final_num_el = 2*num_elements;
     char num_elements_buf[8] = {0};
-    snprintf(num_elements_buf, sizeof(num_elements_buf), "%zu", num_elements);
+    snprintf(num_elements_buf, sizeof(num_elements_buf), "%zu", final_num_el);
     size_t num_elements_len = strlen(num_elements_buf);
     size_t total_bytes = 1 + num_elements_len + 2 + total_key_bytes + total_value_bytes + 1;
     char* response = (char*)calloc(total_bytes, sizeof(char));
@@ -170,44 +199,61 @@ generate_conf_get_response(char** keys,
     int pos = 0;
     pos += snprintf(response + pos, total_bytes - pos, "*%s\r\n", num_elements_buf);
     for (size_t i = 0; i < num_elements; i++) {
+        if(!keys[i]){
+            free(response);
+            return NULL;
+        }
         pos += snprintf(response + pos, total_bytes - pos, "%s%s", keys[i], values[i]);
     }
     return response;
 };
 void
-insert_key_value_str_to_str_array(KeyValuePair* kvp, 
+insert_key_value_str_to_str_array(const KeyValuePair* kvp, 
                                   char**        value_array,
                                   char**        key_array,
                                   unsigned int* total_bytes_val_arr,
                                   unsigned int* total_bytes_key_arr,
-                                  unsigned int* next_pos){
-    ValueNode* value = kvp->value;
-    KeyNode*   key   = kvp->key;
-    char* key_str = NULL, *value_str = NULL;
-    if(!value->content || value->dtype==BULK_STR){
+                                  unsigned int* nr_inserted_el){
+    ValueNode* value;
+    KeyNode*   key;
+    if(!kvp||!(key=kvp->key) || !(value=kvp->value)){
         return;
     };
-    *total_bytes_key_arr += key_or_value_node_to_string(key->content, &key_str, TYPE_KEY_NODE)-1;
-    *total_bytes_val_arr += key_or_value_node_to_string(value->content, &value_str, TYPE_VALUE_NODE)-1;
-    if(key && value){
-        key_array[*next_pos] = key->content;
-        value_array[*next_pos] = value->content;
-        (*next_pos)++;
+    char* key_str = NULL, *value_str = NULL;
+    if(!key->content || !value->content ||
+        value->dtype != BULK_STR){
+        return;
+    };
+    int key_arr_str_size      = key_or_value_node_to_string(key, &key_str, TYPE_KEY_NODE)-1;
+    int val_arr_str_size      = key_or_value_node_to_string(value, &value_str, TYPE_VALUE_NODE)-1;
+    unsigned int is_valid_key = is_it_possible_to_insert_the_str_in_array(key_array, (size_t)*nr_inserted_el, key_str);
+    if(key_str && value_str && is_valid_key){
+        *total_bytes_key_arr += key_arr_str_size;
+        *total_bytes_val_arr += val_arr_str_size;
+        key_array[*nr_inserted_el] = key_str;
+        value_array[*nr_inserted_el] = value_str;
+        (*nr_inserted_el)++;
         return;
     }
-    if(key){
-        free(key);
-    }
-    if(value){
-        free(value);
-    }
+    free(key_str);
+    free(value_str);
     return;
+};
+unsigned int
+is_it_possible_to_insert_the_str_in_array(char**arr, size_t size, char* str){
+    for (size_t i = 0; i < size; i++){
+        char* value = arr[i];
+        if(strcmp(str, value)==0){
+            return 0;
+        };
+    }
+    return 1;    
 }
 RedisCommand
 find_redis_cmd(char* cmd){
     unsigned char i = 0;
     for (CommandEntry item = command_table[i]; item.name; item = command_table[i++]){
-        MatchErrorState state = does_the_strings_matches(item.name,cmd);
+        MatchErrorState state = does_the_strings_match(item.name,cmd);
         switch(state){
             case MATCH:
                 return item.cmd;
@@ -507,6 +553,9 @@ int
 key_or_value_node_to_string(const void* node, char** rtn_val, NodeType nt){
     int content_size;
     char* content;
+    if(!node){
+        return -1;
+    }
     if(nt==TYPE_KEY_NODE){
         content_size = ((KeyNode*)node)->size;
         content      = ((KeyNode*)node)->content; 
@@ -980,7 +1029,7 @@ __validate_px_ex_content(BulkStringNode* node, char* state){
         *state = -1;
         return;
     }
-    for (size_t i = 0; i < size; i++){
+    for (size_t i = 0; i < (size_t)size; i++){
         if(content[i]<48 ||content[i]>57){
             *state=-1;
             return;

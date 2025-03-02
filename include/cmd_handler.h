@@ -113,7 +113,7 @@ unsigned char has_key_expired(KeyNode* new_key, KeyNode* prev_key);
 RedisCommand  find_redis_cmd(char* cmd);
 char*         handle_conf_cmd(GenericNode* gnode, SimpleMap* config_dict);
 void
-insert_key_value_str_to_str_array(KeyValuePair* kvp, 
+insert_key_value_str_to_str_array(const KeyValuePair* kvp, 
                                   char**        value_array,
                                   char**        key_array,
                                   unsigned int* total_bytes_val_arr,
@@ -125,4 +125,5 @@ generate_conf_get_response(char** keys,
                             const unsigned int total_key_bytes,
                             const unsigned int total_value_bytes,
                             size_t num_elements);
+char* handle_conf_get(BulkStringNode* bnode, SimpleMap* config_dict);
 #endif 

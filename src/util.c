@@ -169,8 +169,11 @@ setup(int argc, char** argv, SimpleMap** sm, SimpleMap** config_dict){
         key_len = strlen(keys[i])+1;
         char* key = (char*)calloc(key_len,sizeof(char));
         strcpy(key,keys[i]);
-        kvp = create_key_val_pair(key,values[i]);
-        if(set(*config_dict, kvp, &compare_str)!=SUCESS_SET){
+        
+        kvp = create_key_val_pair(create_key_node(key, 0, 0, strlen(keys[i])),
+                                  create_value_node_string(values[i],BULK_STR,strlen(values[i]))
+                                );
+        if(set(*config_dict, kvp, &compare)!=SUCESS_SET){
             exit(EXIT_FAILURE);
         }
         free(kvp);
@@ -190,7 +193,7 @@ setup(int argc, char** argv, SimpleMap** sm, SimpleMap** config_dict){
  * 
  */
 MatchErrorState
-does_the_strings_matches(const char* pattern, const char* target){
+does_the_strings_match(const char* pattern, const char* target){
     if(!pattern || !target){
         return MATCH_ERROR;
     };

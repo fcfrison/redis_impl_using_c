@@ -19,5 +19,5 @@ void cli_parser(int    argc,
                 char*  default_redis_rdbfile);
 void  setup(int argc, char** argv, SimpleMap** sm, SimpleMap** config_dict);
 void* compare_str(const void* key_a, const void* key_b);
-MatchErrorState does_the_strings_matches(const char* pattern, const char* target);
+MatchErrorState does_the_strings_match(const char* pattern, const char* target);
 #endif

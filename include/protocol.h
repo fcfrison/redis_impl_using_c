@@ -54,6 +54,6 @@ struct BulkStringNode{
 
 
 ArrayNode* lexer(int fd);
-BulkStringNode* parse_bulk_str(int fd);
+BulkStringNode*  lex_bulk_str(int fd);
 void delete_array(void* el, int lp_bck);
 #endif

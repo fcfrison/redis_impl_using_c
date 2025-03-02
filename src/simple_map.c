@@ -246,3 +246,27 @@ delete_map(SimpleMap* sm, void* (*clean_up)(void*, void*)){
     free(sm);
     return 1;
 }
+
+KeyValuePair*
+next(SimpleMapWrapper* self){
+    if(!self->sm         || !self->sm->keys || 
+       !self->sm->values || self->sm->top<0){
+        return NULL;
+       };
+    int curr = self->index;
+    if(curr > self->sm->top){
+        return NULL;
+    };
+    self->index++;
+    return create_key_val_pair(self->sm->keys[curr]->key, self->sm->values[curr]->value);
+}
+int
+init_simple_map_wrapper(const SimpleMap* sm, SimpleMapWrapper* smw){
+    if(!smw){
+        return 0;
+    }
+    smw->index = 0;
+    smw->next  = &next;
+    smw->sm    = sm;
+    return 1;
+};

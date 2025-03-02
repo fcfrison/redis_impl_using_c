@@ -4,6 +4,7 @@ typedef struct KeyWrapper KeyWrapper;
 typedef struct ValueWrapper ValueWrapper;
 typedef struct SimpleMap SimpleMap;
 typedef struct KeyValuePair KeyValuePair;
+typedef struct SimpleMapWrapper SimpleMapWrapper;
 struct SimpleMap{
     KeyWrapper**   keys;
     ValueWrapper** values;
@@ -36,6 +37,13 @@ enum RemoveItemState{
     REMOVE_SUCCESS,
     REMOVE_KEY_NOT_FOUND
 };
+
+struct SimpleMapWrapper{
+    int index;
+    KeyValuePair* (*next)(SimpleMapWrapper*);
+    const SimpleMap* sm;
+};
+
 int remove_key(SimpleMap* sm, void* key, void*(cmp_fptr)(const void* a, const void* b), KeyValuePair* rmv_pair);
 KeyValuePair* create_key_val_pair(void* key, void* value);
 
@@ -47,4 +55,5 @@ int set(SimpleMap* sm, KeyValuePair* key_par, void*(cmp_fptr)(const void* a, con
 KeyValuePair* get(SimpleMap* sm, void* key, void*(cmp_fptr)(const void* a, const void* b));
 int           __find(const SimpleMap* sm, const void* key, void*(cmp_fptr)(const void* a, const void* b));
 SimpleMap*    create_simple_map(void);
+int init_simple_map_wrapper(const SimpleMap* sm, SimpleMapWrapper* smw);
 #endif // SIMPLE_MAP_H        delete_map(SimpleMap* sm, void* (*clean_up)(void*, void*));

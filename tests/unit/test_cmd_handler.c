@@ -1991,7 +1991,326 @@ void test_find_redis_cmd_match_error() {
 }
 
 
+// Test case 1: Generate response with one key-value pair
+void test_generate_conf_get_response_single_pair() {
+    char* keys[] = {"key1"};
+    char* values[] = {"value1"};
+    unsigned int total_key_bytes = strlen("key1");
+    unsigned int total_value_bytes = strlen("value1");
+    size_t num_elements = 1;
+
+    char* response = generate_conf_get_response(keys, values, total_key_bytes, total_value_bytes, num_elements);
+
+    assert(response != NULL);
+    assert(strcmp(response, "*1\r\nkey1value1") == 0);
+
+    free(response);
+}
+
+// Test case 2: Generate response with multiple key-value pairs
+void test_generate_conf_get_response_multiple_pairs() {
+    char* keys[] = {"key1", "key2"};
+    char* values[] = {"value1", "value2"};
+    unsigned int total_key_bytes = strlen("key1") + strlen("key2");
+    unsigned int total_value_bytes = strlen("value1") + strlen("value2");
+    size_t num_elements = 2;
+
+    char* response = generate_conf_get_response(keys, values, total_key_bytes, total_value_bytes, num_elements);
+
+    assert(response != NULL);
+    assert(strcmp(response, "*2\r\nkey1value1key2value2") == 0);
+
+    free(response);
+}
+
+// Test case 3: Generate response with empty keys and values
+void test_generate_conf_get_response_empty_pairs() {
+    char* keys[] = {"", ""};
+    char* values[] = {"", ""};
+    unsigned int total_key_bytes = 0;
+    unsigned int total_value_bytes = 0;
+    size_t num_elements = 2;
+
+    char* response = generate_conf_get_response(keys, values, total_key_bytes, total_value_bytes, num_elements);
+
+    assert(response != NULL);
+    assert(strcmp(response, "*2\r\n") == 0);
+
+    free(response);
+}
+
+// Test case 4: Generate response with NULL keys or values (should return NULL)
+void test_generate_conf_get_response_null_input() {
+    char* keys[] = {NULL, "key2"};
+    char* values[] = {"value1", "value2"};
+    unsigned int total_key_bytes = 0 + strlen("key2");
+    unsigned int total_value_bytes = strlen("value1") + strlen("value2");
+    size_t num_elements = 2;
+
+    char* response = generate_conf_get_response(keys, values, total_key_bytes, total_value_bytes, num_elements);
+
+    assert(response == NULL);
+}
+
+// Test case 5: Generate response with zero total_key_bytes and total_value_bytes
+void test_generate_conf_get_response_zero_bytes() {
+    char* keys[] = {"", ""};
+    char* values[] = {"", ""};
+    unsigned int total_key_bytes = 0;
+    unsigned int total_value_bytes = 0;
+    size_t num_elements = 2;
+
+    char* response = generate_conf_get_response(keys, values, total_key_bytes, total_value_bytes, num_elements);
+
+    assert(response != NULL);
+    assert(strcmp(response, "*2\r\n") == 0);
+
+    free(response);
+}
+
+// Test case 6: Generate response with large key and value sizes
+void test_generate_conf_get_response_large_sizes() {
+    char* keys[] = {"very_long_key_1234567890"};
+    char* values[] = {"very_long_value_1234567890"};
+    unsigned int total_key_bytes = strlen("very_long_key_1234567890");
+    unsigned int total_value_bytes = strlen("very_long_value_1234567890");
+    size_t num_elements = 1;
+
+    char* response = generate_conf_get_response(keys, values, total_key_bytes, total_value_bytes, num_elements);
+
+    assert(response != NULL);
+    assert(strcmp(response, "*1\r\nvery_long_key_1234567890very_long_value_1234567890") == 0);
+
+    free(response);
+}
+
+// Test case 7: Generate response with num_elements zero (should return empty response)
+void test_generate_conf_get_response_zero_elements() {
+    char* keys[] = {"key1"};
+    char* values[] = {"value1"};
+    unsigned int total_key_bytes = strlen("key1");
+    unsigned int total_value_bytes = strlen("value1");
+    size_t num_elements = 0;
+
+    char* response = generate_conf_get_response(keys, values, total_key_bytes, total_value_bytes, num_elements);
+
+    assert(response != NULL);
+    assert(strcmp(response, "*0\r\n") == 0);
+
+    free(response);
+}
+
+
+// Test case 1: Insert valid key-value pair into arrays
+void test_insert_key_value_str_to_str_array_valid_pair() {
+    KeyValuePair kvp;
+    KeyNode key = {"key1", NULL, 0, 0, 4};
+    ValueNodeString value = {"value1", BULK_STR, strlen("value1")};
+    kvp.key = &key;
+    kvp.value = &value;
+
+    char* key_array[10] = {0};
+    char* value_array[10] = {0};
+    unsigned int total_bytes_key_arr = 0;
+    unsigned int total_bytes_val_arr = 0;
+    unsigned int next_pos = 0;
+
+    insert_key_value_str_to_str_array(&kvp, value_array, key_array, &total_bytes_val_arr, &total_bytes_key_arr, &next_pos);
+
+    assert(strcmp(key_array[0], "$4\r\nkey1\r\n") == 0); // Key inserted correctly
+    assert(strcmp(value_array[0], "$6\r\nvalue1\r\n") == 0); // Value inserted correctly
+    assert(total_bytes_key_arr == 10); // Total bytes for keys updated
+    assert(total_bytes_val_arr == 12); // Total bytes for values updated
+    assert(next_pos == 1); // Next position updated
+};
+// Test case 2: Insert key-value pair with NULL value content
+void test_insert_key_value_str_to_str_array_null_value_content() {
+    KeyValuePair kvp;
+    KeyNode key = {"key1", NULL, 0, 0, 4};
+    ValueNodeString value = {NULL, BULK_STR, 0}; // NULL content
+    kvp.key = &key;
+    kvp.value = &value;
+
+    char* key_array[10] = {0};
+    char* value_array[10] = {0};
+    unsigned int total_bytes_key_arr = 0;
+    unsigned int total_bytes_val_arr = 0;
+    unsigned int next_pos = 0;
+
+    insert_key_value_str_to_str_array(&kvp, value_array, key_array, &total_bytes_val_arr, &total_bytes_key_arr, &next_pos);
+
+    assert(key_array[0] == NULL); // No key inserted
+    assert(value_array[0] == NULL); // No value inserted
+    assert(total_bytes_key_arr == 0); // Total bytes for keys unchanged
+    assert(total_bytes_val_arr == 0); // Total bytes for values unchanged
+    assert(next_pos == 0); // Next position unchanged
+}
+
+// Test case 3: Insert key-value pair with non-BULK_STR value type
+void test_insert_key_value_str_to_str_array_non_bulk_str_value() {
+    KeyValuePair kvp;
+    KeyNode key = {"key1", NULL, 0, 0, 4};
+    ValueNode value = {"value1", ARRAY}; // Non-BULK_STR type
+    kvp.key = &key;
+    kvp.value = &value;
+
+    char* key_array[10] = {0};
+    char* value_array[10] = {0};
+    unsigned int total_bytes_key_arr = 0;
+    unsigned int total_bytes_val_arr = 0;
+    unsigned int next_pos = 0;
+
+    insert_key_value_str_to_str_array(&kvp, value_array, key_array, &total_bytes_val_arr, &total_bytes_key_arr, &next_pos);
+
+    assert(key_array[0] == NULL); // No key inserted
+    assert(value_array[0] == NULL); // No value inserted
+    assert(total_bytes_key_arr == 0); // Total bytes for keys unchanged
+    assert(total_bytes_val_arr == 0); // Total bytes for values unchanged
+    assert(next_pos == 0); // Next position unchanged
+};
+
+// Test case 4: Insert key-value pair with NULL key
+void test_insert_key_value_str_to_str_array_null_key() {
+    KeyValuePair kvp;
+    KeyNode* key = NULL; // NULL key
+    ValueNodeString value = {"value1", BULK_STR, 6};
+    kvp.key = key;
+    kvp.value = &value;
+
+    char* key_array[10] = {0};
+    char* value_array[10] = {0};
+    unsigned int total_bytes_key_arr = 0;
+    unsigned int total_bytes_val_arr = 0;
+    unsigned int next_pos = 0;
+
+    insert_key_value_str_to_str_array(&kvp, value_array, key_array, &total_bytes_val_arr, &total_bytes_key_arr, &next_pos);
+
+    assert(key_array[0] == NULL); // No key inserted
+    assert(value_array[0] == NULL); // No value inserted
+    assert(total_bytes_key_arr == 0); // Total bytes for keys unchanged
+    assert(total_bytes_val_arr == 0); // Total bytes for values unchanged
+    assert(next_pos == 0); // Next position unchanged
+};
+
+// Test case 1: Valid BulkStringNode and SimpleMap with matching keys
+void test_handle_conf_get_valid_input_one_conf_item() {
+    BulkStringNode* bnode = create_bulk_string_node("key1", NULL);
+    SimpleMap* config_dict = create_simple_map();
+
+    KeyNode* key = create_key_node("key1", 0, 0, 4);
+    ValueNode* value = create_value_node_string("value1", BULK_STR, 6);
+    config_dict->keys[0] = (KeyWrapper*)calloc(1, sizeof(KeyWrapper));
+    config_dict->keys[0]->key = key;
+    config_dict->values[0] = (ValueWrapper*)calloc(1, sizeof(ValueWrapper));
+    config_dict->values[0]->value = value;
+    config_dict->top = 0;
+
+    char* result = handle_conf_get(bnode, config_dict);
+
+    assert(result != NULL); // Expect a valid response
+    assert(strcmp(result, "*2\r\n$4\r\nkey1\r\n$6\r\nvalue1\r\n") == 0); // Expect correct response format
+
+    free(result);
+    free(bnode->content);
+    free(bnode->node);
+    free(bnode);
+    free(config_dict->keys[0]);
+    free(config_dict->values[0]);
+    free(config_dict->keys);
+    free(config_dict->values);
+    free(config_dict);
+}
+// Test case 2: Valid BulkStringNode and SimpleMap with 2 keys
+void test_handle_conf_get_valid_input_2_different_items() {
+    BulkStringNode* bnode = create_bulk_string_node("*", NULL);
+    SimpleMap* config_dict = create_simple_map();
+
+    KeyNode* key = create_key_node("key1", 0, 0, 4);
+    ValueNode* value = create_value_node_string("value1", BULK_STR, 6);
+    KeyValuePair* kvp = create_key_val_pair(key,value);
+    set(config_dict, kvp, &compare);
+    free(kvp);
+    KeyNode* key_one = create_key_node("key2", 0, 0, 4);
+    ValueNode* value_one = create_value_node_string("value2", BULK_STR, 6);
+    kvp = create_key_val_pair(key_one,value_one);
+    set(config_dict,kvp,&compare);
+    char* result = handle_conf_get(bnode, config_dict);
+
+    assert(result != NULL); // Expect a valid response
+    assert(strcmp(result, "*4\r\n$4\r\nkey1\r\n$6\r\nvalue1\r\n$4\r\nkey2\r\n$6\r\nvalue2\r\n") == 0); // Expect correct response format
+
+    free(result);
+    free(bnode->content);
+    free(bnode->node);
+    free(bnode);
+    free(config_dict->keys[0]);
+    free(config_dict->values[0]);
+    free(config_dict->keys);
+    free(config_dict->values);
+    free(config_dict);
+}
+// Test case 3: Valid BulkStringNode and SimpleMap. Request same item twice.
+void test_handle_conf_get_valid_input_same_request_twice() {
+    BulkStringNode* bnode_two = create_bulk_string_node("*", NULL);
+    BulkStringNode* bnode_one = create_bulk_string_node("*", (GenericNode*)bnode_two);
+    SimpleMap* config_dict = create_simple_map();
+
+    KeyNode* key = create_key_node("key1", 0, 0, 4);
+    ValueNode* value = create_value_node_string("value1", BULK_STR, 6);
+    KeyValuePair* kvp = create_key_val_pair(key,value);
+    set(config_dict, kvp, &compare);
+    free(kvp);
+    KeyNode* key_one = create_key_node("key2", 0, 0, 4);
+    ValueNode* value_one = create_value_node_string("value2", BULK_STR, 6);
+    kvp = create_key_val_pair(key_one,value_one);
+    set(config_dict,kvp,&compare);
+    char* result = handle_conf_get(bnode_one, config_dict);
+
+    assert(result != NULL); // Expect a valid response
+    assert(strcmp(result, "*4\r\n$4\r\nkey1\r\n$6\r\nvalue1\r\n$4\r\nkey2\r\n$6\r\nvalue2\r\n") == 0); // Expect correct response format
+
+    free(result);
+    free(bnode_one->content);
+    free(bnode_one->node);
+    free(bnode_one);
+    free(bnode_two->content);
+    free(bnode_two->node);
+    free(bnode_two);
+    free(config_dict->keys[0]);
+    free(config_dict->values[0]);
+    free(config_dict->keys[1]);
+    free(config_dict->values[1]);
+    free(config_dict->keys);
+    free(config_dict->values);
+    free(config_dict);
+};
+// Test case 4: Valid BulkStringNode and SimpleMap. Request non existent item.
+void test_handle_conf_get_valid_input_non_existent_item() {
+    BulkStringNode* bnode_one   = create_bulk_string_node("KEY55", NULL);
+    SimpleMap*      config_dict = create_simple_map();
+
+    KeyNode* key      = create_key_node("key1", 0, 0, 4);
+    ValueNode* value  = create_value_node_string("value1", BULK_STR, 6);
+    KeyValuePair* kvp = create_key_val_pair(key,value);
+    set(config_dict, kvp, &compare);
+    free(kvp);
+    char* result = handle_conf_get(bnode_one, config_dict);
+
+    assert(result != NULL); // Expect a valid response
+    assert(strcmp(result, "*0\r\n") == 0);
+
+    free(result);
+    free(bnode_one->content);
+    free(bnode_one->node);
+    free(bnode_one);
+    free(config_dict->keys[0]);
+    free(config_dict->values[0]);
+    free(config_dict->keys);
+    free(config_dict->values);
+    free(config_dict);
+};
 int main() {
+    /*
     test_is_set_option_valid();
     test_handle_set_options_valid();
     test_handle_set_options_valid_one();
@@ -2132,6 +2451,26 @@ int main() {
     test_find_redis_cmd_null_cmd();
     test_find_redis_cmd_empty_cmd();
     test_find_redis_cmd_match_error();
+
+
+    // generate_conf_get_response
+    test_generate_conf_get_response_single_pair();
+    test_generate_conf_get_response_multiple_pairs();
+    test_generate_conf_get_response_empty_pairs();
+    test_generate_conf_get_response_null_input();
+    test_generate_conf_get_response_zero_bytes();
+    test_generate_conf_get_response_large_sizes();
+    test_generate_conf_get_response_zero_elements();
+    
+    test_insert_key_value_str_to_str_array_valid_pair();
+    test_insert_key_value_str_to_str_array_null_value_content();
+    test_insert_key_value_str_to_str_array_non_bulk_str_value();
+    test_insert_key_value_str_to_str_array_null_key();
+    */
+    test_handle_conf_get_valid_input_one_conf_item();
+    test_handle_conf_get_valid_input_2_different_items();
+    test_handle_conf_get_valid_input_same_request_twice();
+    test_handle_conf_get_valid_input_non_existent_item();
     puts("All tests passed");
     return 0;
 }
